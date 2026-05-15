@@ -1,0 +1,35 @@
+{
+  "name": "milky-mcp",
+  "metadata": {
+    "description": "Milky QQ Bot 模拟器 — 通过 MCP 工具控制模拟 QQ 环境，用于本地调试 milky 客户端"
+  },
+  "owner": {
+    "name": "wyf7685"
+  },
+  "plugins": [
+    {
+      "name": "milky-mcp",
+      "source": "./",
+      "description": "Milky QQ Bot 模拟器 — 通过 MCP 工具控制模拟 QQ 环境，用于本地调试 milky 客户端",
+      "version": "0.1.0",
+      "homepage": "https://github.com/SaltifyDev/milky",
+      "repository": "https://github.com/wyf7685/milky-mcp",
+      "license": "MIT",
+      "keywords": [
+        "milky",
+        "qq",
+        "bot",
+        "testing",
+        "mock",
+        "mcp"
+      ],
+      "category": "testing",
+      "tags": [
+        "qq",
+        "bot-testing",
+        "mock-server",
+        "protocol"
+      ]
+    }
+  ]
+}

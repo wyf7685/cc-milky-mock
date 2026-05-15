@@ -1,0 +1,6 @@
+{
+  "milky": {
+    "command": "pnpm",
+    "args": ["--dir", "${CLAUDE_PLUGIN_ROOT}/server", "start"]
+  }
+}

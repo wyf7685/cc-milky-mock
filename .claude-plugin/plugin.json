@@ -1,0 +1,6 @@
+{
+  "name": "milky-mcp",
+  "version": "0.1.0",
+  "description": "Milky QQ Bot 模拟器 — 通过 MCP 工具控制模拟 QQ 环境，用于本地调试 milky 客户端",
+  "keywords": ["milky", "qq", "bot", "testing", "mock", "mcp"]
+}

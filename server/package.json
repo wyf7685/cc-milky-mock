@@ -1,0 +1,31 @@
+{
+  "name": "milky-mcp-server",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Milky protocol mock implementation as an MCP server, controllable by AI agents for local debugging",
+  "main": "src/index.ts",
+  "bin": {
+    "milky-mcp-server": "./src/index.ts"
+  },
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "check": "tsc --noEmit"
+  },
+  "packageManager": "pnpm@10.33.0",
+  "dependencies": {
+    "@saltify/milky-protocol": "^1.2.2",
+    "@saltify/milky-types": "^1.2.2",
+    "@cfworker/json-schema": "^4.1.1",
+    "@modelcontextprotocol/server": "^2.0.0-alpha.2",
+    "@hono/node-server": "^1.14.0",
+    "hono": "^4.7.0",
+    "ws": "^8.18.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/ws": "^8.5.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  }
+}
