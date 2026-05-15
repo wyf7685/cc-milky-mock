@@ -15,8 +15,8 @@
     "declaration": true,
     "strict": true,
     "noFallthroughCasesInSwitch": true,
-    "rootDir": "src",
+    "rootDir": ".",
     "outDir": "dist"
   },
-  "include": ["src"]
+  "include": ["src", "*.config.ts"]
 }
