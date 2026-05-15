@@ -78,31 +78,6 @@ export function registerServerTools(
   seq: SequenceGenerator,
 ): void {
   server.registerTool(
-    'start_milky_server',
-    {
-      title: '启动 milky 服务器',
-      description:
-        '启动 HTTP + WebSocket 服务器，供 milky 客户端连接。' +
-        '如果已有运行中的实例，会先停止再启动新的。',
-      inputSchema: z.object({
-        port: z.number().int().min(1).max(65535).default(3000).describe('监听端口'),
-        access_token: z
-          .string()
-          .default('milky-mock-token')
-          .describe('Bearer token，客户端连接时需要提供'),
-      }),
-    },
-    async ({ port, access_token }) => {
-      try {
-        const text = await startServer(port, access_token, state, events, seq);
-        return { content: [{ type: 'text', text }] };
-      } catch (err) {
-        return { content: [{ type: 'text', text: `Failed to start server: ${(err as Error).message}` }], isError: true };
-      }
-    },
-  );
-
-  server.registerTool(
     'stop_milky_server',
     {
       title: '停止 milky 服务器',

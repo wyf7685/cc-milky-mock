@@ -21,6 +21,7 @@ export function createStore(): SimState {
     groupFolders: new Map(),
     pinnedPeers: new Set(),
     customFaceUrls: [],
+    clientApiCalls: [],
     resourceStore: new ResourceStore(),
   };
 }

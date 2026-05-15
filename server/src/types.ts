@@ -118,6 +118,13 @@ export interface SimGroupFolder {
 
 import type { ResourceStore } from './utils/resources.js';
 
+export interface ClientApiCall {
+  api: string;
+  params: Record<string, unknown>;
+  time: number;
+  error?: string;
+}
+
 export interface SimState {
   bot: {
     uin: number;
@@ -144,5 +151,6 @@ export interface SimState {
   pinnedPeers: Set<string>; // "scene:peerId"
   customFaceUrls: string[];
 
+  clientApiCalls: ClientApiCall[];
   resourceStore: ResourceStore;
 }

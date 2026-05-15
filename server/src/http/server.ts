@@ -82,8 +82,16 @@ export function createHttpServer(
       }
 
       const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
-      const result = await handler(body, ctx);
-      return c.json(ok(result));
+      const callRecord: { api: string; params: Record<string, unknown>; time: number; error?: string } = { api: apiName, params: body, time: Math.floor(Date.now() / 1000) };
+      try {
+        const result = await handler(body, ctx);
+        state.clientApiCalls.push(callRecord);
+        return c.json(ok(result));
+      } catch (err) {
+        callRecord.error = err instanceof Error ? err.message : String(err);
+        state.clientApiCalls.push(callRecord);
+        throw err;
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       return c.json(failed(-1, message));

@@ -4,6 +4,7 @@ import type { SimState } from '@/types.js';
 import type { EventBus } from '@/state/events.js';
 
 const zUin = z.number().int().min(10001).max(4294967295);
+const zActivityType = z.enum(['state', 'messages', 'events', 'api_calls']);
 
 export function registerInspectTools(
   server: McpServer,
@@ -11,70 +12,58 @@ export function registerInspectTools(
   events: EventBus,
 ): void {
   server.registerTool(
-    'get_sent_messages',
+    'get_activity',
     {
-      title: '查看客户端发送的消息',
-      description: '查看 milky 客户端通过 mock 服务器发送的消息记录',
+      title: '查看模拟活动',
+      description: '查看模拟环境的状态、消息记录、事件日志和 API 调用记录。可通过 type 数组选择需要的内容。',
       inputSchema: z.object({
-        limit: z.number().int().optional().default(20).describe('返回条数'),
-        message_scene: z.enum(['friend', 'group', 'temp']).optional().describe('按场景过滤'),
-        peer_id: zUin.optional().describe('按会话 ID 过滤'),
+        type: z.array(zActivityType).optional().default(['state', 'messages', 'events', 'api_calls']).describe('要获取的数据类型数组'),
+        limit: z.number().int().optional().default(20).describe('消息/事件/API 调用的最大返回条数'),
+        message_scene: z.enum(['friend', 'group', 'temp']).optional().describe('按场景过滤消息'),
+        peer_id: zUin.optional().describe('按会话 ID 过滤消息'),
       }),
     },
-    async ({ limit, message_scene, peer_id }) => {
-      let msgs = [...state.clientSentMessages];
-      if (message_scene) msgs = msgs.filter((m) => m.scene === message_scene);
-      if (peer_id != null) msgs = msgs.filter((m) => m.peerId === peer_id);
-      msgs = msgs.slice(-(limit ?? 20));
-      return {
-        content: [{ type: 'text', text: JSON.stringify(msgs, null, 2) }],
-      };
-    },
-  );
+    async ({ type, limit, message_scene, peer_id }) => {
+      const types = type ?? ['state', 'messages', 'events', 'api_calls'];
+      const result: Record<string, unknown> = {};
+      const n = limit ?? 20;
 
-  server.registerTool(
-    'get_state',
-    {
-      title: '查看模拟环境状态',
-      description: '返回当前模拟环境的状态摘要',
-      inputSchema: z.object({}),
-    },
-    async () => {
-      const summary = {
-        bot: state.bot,
-        users: state.users.size,
-        friends: state.friends.size,
-        groups: [...state.groups.entries()].map(([id, g]) => ({
-          group_id: id,
-          group_name: g.groupName,
-          member_count: g.memberCount,
-          whole_muted: g.wholeMuted,
-        })),
-        total_messages: [...state.messages.values()].reduce((sum, msgs) => sum + msgs.length, 0),
-        client_sent_messages: state.clientSentMessages.length,
-        friend_requests: state.friendRequests.length,
-        pinned_peers: [...state.pinnedPeers],
-        connections: events.getConnectionCount(),
-      };
-      return {
-        content: [{ type: 'text', text: JSON.stringify(summary, null, 2) }],
-      };
-    },
-  );
+      if (types.includes('state')) {
+        result.state = {
+          bot: state.bot,
+          users: state.users.size,
+          friends: state.friends.size,
+          groups: [...state.groups.entries()].map(([id, g]) => ({
+            group_id: id,
+            group_name: g.groupName,
+            member_count: g.memberCount,
+            whole_muted: g.wholeMuted,
+          })),
+          total_messages: [...state.messages.values()].reduce((sum, msgs) => sum + msgs.length, 0),
+          client_sent_messages: state.clientSentMessages.length,
+          friend_requests: state.friendRequests.length,
+          pinned_peers: [...state.pinnedPeers],
+          connections: events.getConnectionCount(),
+        };
+      }
 
-  server.registerTool(
-    'get_event_log',
-    {
-      title: '查看事件日志',
-      description: '查看最近发出的事件记录',
-      inputSchema: z.object({
-        limit: z.number().int().optional().default(50).describe('返回条数'),
-      }),
-    },
-    async ({ limit }) => {
-      const log = events.getRecentEvents(limit ?? 50);
+      if (types.includes('messages')) {
+        let msgs = [...state.clientSentMessages];
+        if (message_scene) msgs = msgs.filter((m) => m.scene === message_scene);
+        if (peer_id != null) msgs = msgs.filter((m) => m.peerId === peer_id);
+        result.messages = msgs.slice(-n);
+      }
+
+      if (types.includes('events')) {
+        result.events = events.getRecentEvents(n);
+      }
+
+      if (types.includes('api_calls')) {
+        result.api_calls = state.clientApiCalls.slice(-n);
+      }
+
       return {
-        content: [{ type: 'text', text: JSON.stringify(log, null, 2) }],
+        content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
       };
     },
   );
