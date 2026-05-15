@@ -20,8 +20,12 @@ export function createHttpServer(
   const app = new Hono();
   const ctx: ApiContext = { state, events, seq };
 
-  // Auth middleware: checks Authorization header OR access_token query param
+  // Auth middleware: skip /resources/ (public), check Bearer token elsewhere
   app.use('*', async (c, next) => {
+    if (c.req.path.startsWith('/resources/')) {
+      await next();
+      return;
+    }
     const authHeader = c.req.header('Authorization');
     let token = authHeader?.replace('Bearer ', '');
     if (!token) {
