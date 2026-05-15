@@ -11,7 +11,7 @@
       "name": "milky-mock",
       "source": "./",
       "description": "Milky QQ Bot 模拟器 — 通过 MCP 工具控制模拟 QQ 环境，用于本地调试 milky 客户端",
-      "version": "0.2.0",
+      "version": "0.2.1",
       "homepage": "https://milky.ntqqrev.org/",
       "repository": "https://github.com/wyf7685/cc-milky-mock",
       "license": "MIT",
