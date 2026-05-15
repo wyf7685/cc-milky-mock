@@ -5,6 +5,7 @@ import type { EventBus, MilkyEvent } from '@/state/events.js';
 import type { SequenceGenerator } from '@/state/sequences.js';
 import { getMessageKey } from '@/state/store.js';
 import { createMember, deleteMember, setMemberRole } from '@/utils/state.js';
+import { getCurrentPort } from './server.js';
 
 const zUin = z.number().int().min(10001).max(4294967295);
 
@@ -352,7 +353,7 @@ async function convertToIncoming(seg: SimMessageSegment, state: SimState): Promi
         type,
         data: {
           resource_id: entry.resourceId,
-          temp_url: `/resources/${entry.resourceId}`,
+          temp_url: `http://localhost:${getCurrentPort()}/resources/${entry.resourceId}`,
           width: entry.width,
           height: entry.height,
           summary: entry.summary,

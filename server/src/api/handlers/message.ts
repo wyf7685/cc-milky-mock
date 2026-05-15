@@ -1,6 +1,7 @@
 import type { ApiHandler } from '@/api/registry.js';
 import { getMessageKey } from '@/state/store.js';
 import type { SimMessage, SimMessageSegment } from '@/types.js';
+import { getCurrentPort } from '@/mcp/tools/server.js';
 
 async function processSegments(segments: SimMessageSegment[], state: import('@/types.js').SimState): Promise<SimMessageSegment[]> {
   const result: SimMessageSegment[] = [];
@@ -18,7 +19,7 @@ async function processSegments(segments: SimMessageSegment[], state: import('@/t
           type: 'image',
           data: {
             resource_id: entry.resourceId,
-            temp_url: `/resources/${entry.resourceId}`,
+            temp_url: `http://localhost:${getCurrentPort()}/resources/${entry.resourceId}`,
             width: entry.width,
             height: entry.height,
             summary: entry.summary,
@@ -137,7 +138,7 @@ export function registerMessageHandlers(handlers: Map<string, ApiHandler>): void
     const id = String(resource_id);
     const entry = ctx.state.resourceStore.getEntry(id);
     if (!entry) throw new Error(`Resource ${id} not found`);
-    return { url: `/resources/${entry.resourceId}` };
+    return { url: `http://localhost:${getCurrentPort()}/resources/${entry.resourceId}` };
   });
 
   handlers.set('get_forwarded_messages', ({ forward_id }) => {
