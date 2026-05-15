@@ -1,5 +1,5 @@
 {
-  "name": "milky-mcp",
+  "name": "milky-mock",
   "metadata": {
     "description": "Milky QQ Bot 模拟器 — 通过 MCP 工具控制模拟 QQ 环境，用于本地调试 milky 客户端"
   },
@@ -8,12 +8,12 @@
   },
   "plugins": [
     {
-      "name": "milky-mcp",
+      "name": "milky-mock",
       "source": "./",
       "description": "Milky QQ Bot 模拟器 — 通过 MCP 工具控制模拟 QQ 环境，用于本地调试 milky 客户端",
       "version": "0.1.0",
-      "homepage": "https://github.com/SaltifyDev/milky",
-      "repository": "https://github.com/wyf7685/milky-mcp",
+      "homepage": "https://milky.ntqqrev.org/",
+      "repository": "https://github.com/wyf7685/cc-milky-mock",
       "license": "MIT",
       "keywords": [
         "milky",
