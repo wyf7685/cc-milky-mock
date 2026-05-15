@@ -1,4 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse, type Server } from 'node:http';
+import { readFileSync, existsSync } from 'node:fs';
+import { extname } from 'node:path';
 import { Hono } from 'hono';
 import { streamSSE } from 'hono/streaming';
 import { WebSocketServer, type WebSocket } from 'ws';
@@ -7,6 +9,7 @@ import type { EventBus } from '@/state/events.js';
 import type { SequenceGenerator } from '@/state/sequences.js';
 import { getHandler, type ApiContext } from '@/api/registry.js';
 import { ok, failed } from '@/api/response.js';
+import { getMimeType } from '@/utils/image.js';
 
 export function createHttpServer(
   accessToken: string,
@@ -41,6 +44,21 @@ export function createHttpServer(
         await stream.writeSSE({ data: '', event: 'heartbeat' });
         await new Promise((resolve) => setTimeout(resolve, 30000));
       }
+    });
+  });
+
+  // Static resource serving for images/files
+  app.get('/resources/:resourceId', (c) => {
+    const id = c.req.param('resourceId');
+    const filePath = state.resourceStore.getFilePath(id);
+    if (!filePath || !existsSync(filePath)) {
+      return c.json(failed(-1, 'Resource not found'), 404);
+    }
+    const ext = extname(filePath).slice(1);
+    const mime = getMimeType(ext);
+    const data = readFileSync(filePath);
+    return new Response(data, {
+      headers: { 'Content-Type': mime, 'Cache-Control': 'public, max-age=3600' },
     });
   });
 

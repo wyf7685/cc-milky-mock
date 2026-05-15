@@ -91,4 +91,33 @@ export function registerInspectTools(
       };
     },
   );
+
+  server.registerTool(
+    'get_image_data',
+    {
+      title: '获取图片资源',
+      description: '获取图片资源的本地文件路径，可用 Read 工具查看图片内容',
+      inputSchema: z.object({
+        resource_id: z.string().describe('资源 ID'),
+      }),
+    },
+    async ({ resource_id }) => {
+      const filePath = state.resourceStore.getFilePath(resource_id);
+      if (!filePath) {
+        return { content: [{ type: 'text', text: `Resource ${resource_id} not found` }], isError: true };
+      }
+      const entry = state.resourceStore.getEntry(resource_id);
+      return {
+        content: [{
+          type: 'text',
+          text: [
+            `file: ${filePath}`,
+            `size: ${entry?.width}x${entry?.height}`,
+            `type: ${entry?.subType}`,
+            `summary: ${entry?.summary}`,
+          ].join('\n'),
+        }],
+      };
+    },
+  );
 }

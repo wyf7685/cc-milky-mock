@@ -8,6 +8,7 @@ import { createHttpServer } from '@/http/server.js';
 
 let httpServer: Server | null = null;
 let currentPort: number | null = null;
+let resourceStoreRef: { cleanup(): void } | null = null;
 
 export async function startServer(
   port: number,
@@ -18,6 +19,7 @@ export async function startServer(
 ): Promise<string> {
   if (httpServer) await stopServer();
 
+  resourceStoreRef = state.resourceStore;
   httpServer = createHttpServer(accessToken, state, events, seq);
   currentPort = port;
 
@@ -37,18 +39,36 @@ export async function startServer(
 export async function stopServer(): Promise<void> {
   return new Promise((resolve) => {
     if (!httpServer) { resolve(); return; }
-    httpServer.close(() => {
+    const server = httpServer;
+    // Force-close after 2s if connections don't drain
+    const timer = setTimeout(() => {
+      console.error('[milky-mcp] force-closing milky server (connections did not drain)');
+      server.closeAllConnections?.();
+      finish();
+    }, 2000);
+    const finish = () => {
+      clearTimeout(timer);
       console.error('[milky-mcp] milky server stopped');
+      resourceStoreRef?.cleanup();
       httpServer = null;
       currentPort = null;
       resolve();
-    });
+    };
+    server.close(() => finish());
   });
+}
+
+export function setResourceStoreRef(store: { cleanup(): void }): void {
+  resourceStoreRef = store;
 }
 
 export function getServerStatus(): string | null {
   if (!httpServer) return null;
   return `milky server is running on port ${currentPort}`;
+}
+
+export function getCurrentPort(): number | null {
+  return currentPort;
 }
 
 export function registerServerTools(

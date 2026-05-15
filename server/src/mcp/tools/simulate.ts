@@ -36,7 +36,9 @@ export function registerSimulateTools(
       const messageSeq = seq.next(`message_seq:scene === 'friend' ? 'friend' : 'group':${peer_id}`);
       const time = now();
 
-      const incomingSegments = (segments as SimMessageSegment[]).map((seg) => convertToIncoming(seg));
+      const incomingSegments = await Promise.all(
+        (segments as SimMessageSegment[]).map((seg) => convertToIncoming(seg, state)),
+      );
 
       const msg = {
         scene,
@@ -606,23 +608,48 @@ export function registerSimulateTools(
   );
 }
 
-function convertToIncoming(seg: SimMessageSegment): SimMessageSegment {
-  const { type, ...rest } = seg;
+async function convertToIncoming(seg: SimMessageSegment, state: SimState): Promise<SimMessageSegment> {
+  // Accept both {type, data: {...}} and {type, ...fields} input formats
+  const fields: Record<string, unknown> = (seg.data && typeof seg.data === 'object')
+    ? seg.data as Record<string, unknown>
+    : (() => { const { type: _, ...rest } = seg; return rest; })();
+
+  const type = seg.type as string;
+
   switch (type) {
     case 'text':
     case 'mention':
     case 'mention_all':
     case 'face':
-      return seg;
+      return { type, data: fields };
     case 'reply':
-      return { type, message_seq: rest.message_seq };
-    case 'image':
-      return { type, resource_id: `res_${Date.now()}`, temp_url: '', width: 0, height: 0, summary: '', sub_type: 'normal' };
+      return { type, data: { message_seq: fields.message_seq } };
+    case 'image': {
+      const uri = fields.uri as string | undefined;
+      if (!uri) {
+        return { type, data: { resource_id: `res_${Date.now()}`, temp_url: '', width: 0, height: 0, summary: '[图片]', sub_type: 'normal' } };
+      }
+      const entry = await state.resourceStore.resolveAndStore(uri, {
+        subType: fields.sub_type as string | undefined,
+        summary: fields.summary as string | undefined,
+      });
+      return {
+        type,
+        data: {
+          resource_id: entry.resourceId,
+          temp_url: `/resources/${entry.resourceId}`,
+          width: entry.width,
+          height: entry.height,
+          summary: entry.summary,
+          sub_type: entry.subType,
+        },
+      };
+    }
     case 'record':
-      return { type, resource_id: `res_${Date.now()}`, temp_url: '', duration: 0 };
+      return { type, data: { resource_id: `res_${Date.now()}`, temp_url: '', duration: 0 } };
     case 'video':
-      return { type, resource_id: `res_${Date.now()}`, temp_url: '', width: 0, height: 0, duration: 0 };
+      return { type, data: { resource_id: `res_${Date.now()}`, temp_url: '', width: 0, height: 0, duration: 0 } };
     default:
-      return seg;
+      return { type, data: fields };
   }
 }

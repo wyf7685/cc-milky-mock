@@ -2,10 +2,44 @@ import type { ApiHandler } from '@/api/registry.js';
 import { getMessageKey } from '@/state/store.js';
 import type { SimMessage, SimMessageSegment } from '@/types.js';
 
+async function processSegments(segments: SimMessageSegment[], state: import('@/types.js').SimState): Promise<SimMessageSegment[]> {
+  const result: SimMessageSegment[] = [];
+  for (const seg of segments) {
+    if (seg.type === 'image') {
+      // Support both flat {type, uri} and nested {type, data: {uri}} formats
+      const data = (seg.data ?? seg) as Record<string, unknown>;
+      const uri = (data.uri ?? seg.uri) as string | undefined;
+      if (uri) {
+        const entry = await state.resourceStore.resolveAndStore(String(uri), {
+          subType: (data.sub_type ?? seg.sub_type) as string | undefined,
+          summary: (data.summary ?? seg.summary) as string | undefined,
+        });
+        result.push({
+          type: 'image',
+          data: {
+            resource_id: entry.resourceId,
+            temp_url: `/resources/${entry.resourceId}`,
+            width: entry.width,
+            height: entry.height,
+            summary: entry.summary,
+            sub_type: entry.subType,
+          },
+        });
+      } else {
+        result.push(seg);
+      }
+    } else {
+      result.push(seg);
+    }
+  }
+  return result;
+}
+
 export function registerMessageHandlers(handlers: Map<string, ApiHandler>): void {
-  handlers.set('send_private_message', ({ user_id, message }, ctx) => {
+  handlers.set('send_private_message', async ({ user_id, message }, ctx) => {
     const uid = Number(user_id);
-    const segments = (message as SimMessageSegment[]) ?? [];
+    const rawSegments = (message as SimMessageSegment[]) ?? [];
+    const segments = await processSegments(rawSegments, ctx.state);
     const messageSeq = ctx.seq.next(`message_seq:friend:${uid}`);
     const time = Math.floor(Date.now() / 1000);
     const msg: SimMessage = {
@@ -24,10 +58,11 @@ export function registerMessageHandlers(handlers: Map<string, ApiHandler>): void
     return { message_seq: messageSeq, time };
   });
 
-  handlers.set('send_group_message', ({ group_id, message }, ctx) => {
+  handlers.set('send_group_message', async ({ group_id, message }, ctx) => {
     const gid = Number(group_id);
     if (!ctx.state.groups.has(gid)) throw new Error(`Group ${gid} not found`);
-    const segments = (message as SimMessageSegment[]) ?? [];
+    const rawSegments = (message as SimMessageSegment[]) ?? [];
+    const segments = await processSegments(rawSegments, ctx.state);
     const messageSeq = ctx.seq.next(`message_seq:group:${gid}`);
     const time = Math.floor(Date.now() / 1000);
     const msg: SimMessage = {
@@ -98,8 +133,11 @@ export function registerMessageHandlers(handlers: Map<string, ApiHandler>): void
     };
   });
 
-  handlers.set('get_resource_temp_url', ({ resource_id }) => {
-    return { url: `https://mock.milky.local/resource/${resource_id}` };
+  handlers.set('get_resource_temp_url', ({ resource_id }, ctx) => {
+    const id = String(resource_id);
+    const entry = ctx.state.resourceStore.getEntry(id);
+    if (!entry) throw new Error(`Resource ${id} not found`);
+    return { url: `/resources/${entry.resourceId}` };
   });
 
   handlers.set('get_forwarded_messages', ({ forward_id }) => {

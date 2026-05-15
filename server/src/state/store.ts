@@ -1,4 +1,5 @@
 import type { SimState } from '@/types.js';
+import { ResourceStore } from '@/utils/resources.js';
 
 export function createStore(): SimState {
   return {
@@ -20,6 +21,7 @@ export function createStore(): SimState {
     groupFolders: new Map(),
     pinnedPeers: new Set(),
     customFaceUrls: [],
+    resourceStore: new ResourceStore(),
   };
 }
 

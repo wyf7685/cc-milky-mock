@@ -116,6 +116,8 @@ export interface SimGroupFolder {
   fileCount: number;
 }
 
+import type { ResourceStore } from './utils/resources.js';
+
 export interface SimState {
   bot: {
     uin: number;
@@ -141,4 +143,6 @@ export interface SimState {
 
   pinnedPeers: Set<string>; // "scene:peerId"
   customFaceUrls: string[];
+
+  resourceStore: ResourceStore;
 }
