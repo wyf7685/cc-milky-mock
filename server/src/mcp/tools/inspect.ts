@@ -54,6 +54,7 @@ export function registerInspectTools(
         client_sent_messages: state.clientSentMessages.length,
         friend_requests: state.friendRequests.length,
         pinned_peers: [...state.pinnedPeers],
+        connections: events.getConnectionCount(),
       };
       return {
         content: [{ type: 'text', text: JSON.stringify(summary, null, 2) }],
@@ -74,20 +75,6 @@ export function registerInspectTools(
       const log = events.getRecentEvents(limit ?? 50);
       return {
         content: [{ type: 'text', text: JSON.stringify(log, null, 2) }],
-      };
-    },
-  );
-
-  server.registerTool(
-    'get_connection_count',
-    {
-      title: '查看连接数',
-      description: '查看当前活跃的 SSE/WebSocket 连接数',
-      inputSchema: z.object({}),
-    },
-    async () => {
-      return {
-        content: [{ type: 'text', text: `Active connections: ${events.getConnectionCount()}` }],
       };
     },
   );

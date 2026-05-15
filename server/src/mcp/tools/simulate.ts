@@ -4,6 +4,7 @@ import type { SimState, SimMessageSegment } from '@/types.js';
 import type { EventBus, MilkyEvent } from '@/state/events.js';
 import type { SequenceGenerator } from '@/state/sequences.js';
 import { getMessageKey } from '@/state/store.js';
+import { createMember, deleteMember, setMemberRole } from '@/utils/state.js';
 
 const zUin = z.number().int().min(10001).max(4294967295);
 
@@ -33,7 +34,7 @@ export function registerSimulateTools(
     },
     async ({ message_scene, peer_id, sender_id, segments }) => {
       const scene = message_scene as 'friend' | 'group' | 'temp';
-      const messageSeq = seq.next(`message_seq:scene === 'friend' ? 'friend' : 'group':${peer_id}`);
+      const messageSeq = seq.next(`message_seq:${scene === 'friend' ? 'friend' : 'group'}:${peer_id}`);
       const time = now();
 
       const incomingSegments = await Promise.all(
@@ -54,11 +55,7 @@ export function registerSimulateTools(
       if (!state.messages.has(key)) state.messages.set(key, []);
       state.messages.get(key)!.push(msg);
 
-      const baseEvent = {
-        time,
-        self_id: state.bot.uin,
-        event_type: 'message_receive',
-      };
+      const baseEvent = { time, self_id: state.bot.uin, event_type: 'message_receive' };
 
       let eventData: object;
       if (scene === 'friend') {
@@ -66,18 +63,11 @@ export function registerSimulateTools(
         eventData = {
           ...baseEvent,
           data: {
-            message_scene: 'friend',
-            peer_id,
-            message_seq: messageSeq,
-            sender_id,
-            time,
+            message_scene: 'friend', peer_id, message_seq: messageSeq, sender_id, time,
             segments: incomingSegments,
             friend: {
-              user_id: sender_id,
-              nickname: user?.nickname ?? 'unknown',
-              sex: user?.sex ?? 'unknown',
-              qid: user?.qid ?? '',
-              remark: user?.remark ?? '',
+              user_id: sender_id, nickname: user?.nickname ?? 'unknown', sex: user?.sex ?? 'unknown',
+              qid: user?.qid ?? '', remark: user?.remark ?? '',
               category: { category_id: 0, category_name: '' },
             },
           },
@@ -88,11 +78,7 @@ export function registerSimulateTools(
         eventData = {
           ...baseEvent,
           data: {
-            message_scene: 'group',
-            peer_id,
-            message_seq: messageSeq,
-            sender_id,
-            time,
+            message_scene: 'group', peer_id, message_seq: messageSeq, sender_id, time,
             segments: incomingSegments,
             group: group
               ? { group_id: group.groupId, group_name: group.groupName, member_count: group.memberCount, max_member_count: group.maxMemberCount }
@@ -105,129 +91,7 @@ export function registerSimulateTools(
       }
 
       events.emit(eventData as MilkyEvent);
-      return {
-        content: [{ type: 'text', text: `Message simulated: ${scene} message from ${sender_id} to ${peer_id}, seq=${messageSeq}` }],
-      };
-    },
-  );
-
-  server.registerTool(
-    'simulate_friend_request',
-    {
-      title: '模拟好友请求',
-      description: '模拟收到好友请求事件',
-      inputSchema: z.object({
-        initiator_id: zUin.describe('发起者 QQ 号'),
-        comment: z.string().optional().describe('验证消息'),
-        via: z.string().optional().describe('来源'),
-      }),
-    },
-    async ({ initiator_id, comment, via }) => {
-      const time = now();
-      const uid = `uid_${initiator_id}`;
-      const req = {
-        time,
-        initiatorId: initiator_id,
-        initiatorUid: uid,
-        targetUserId: state.bot.uin,
-        targetUserUid: `uid_${state.bot.uin}`,
-        state: 'pending' as const,
-        comment: comment ?? '',
-        via: via ?? '',
-        isFiltered: false,
-      };
-      state.friendRequests.push(req);
-      events.emit({
-        time,
-        self_id: state.bot.uin,
-        event_type: 'friend_request',
-        data: {
-          initiator_id: initiator_id,
-          initiator_uid: uid,
-          comment: comment ?? '',
-          via: via ?? '',
-        },
-      });
-      return {
-        content: [{ type: 'text', text: `Friend request simulated from ${initiator_id}` }],
-      };
-    },
-  );
-
-  server.registerTool(
-    'simulate_group_join_request',
-    {
-      title: '模拟入群申请',
-      description: '模拟收到入群申请事件',
-      inputSchema: z.object({
-        group_id: zUin.describe('群号'),
-        initiator_id: zUin.describe('申请人 QQ 号'),
-        comment: z.string().optional().describe('验证消息'),
-      }),
-    },
-    async ({ group_id, initiator_id, comment }) => {
-      const time = now();
-      const notifSeq = seq.next(`notification_seq:group:${group_id}`);
-      const notif = {
-        type: 'join_request' as const,
-        groupId: group_id,
-        notificationSeq: notifSeq,
-        isFiltered: false,
-        initiatorId: initiator_id,
-        state: 'pending' as const,
-        comment: comment ?? '',
-      };
-      if (!state.groupNotifications.has(group_id)) state.groupNotifications.set(group_id, []);
-      state.groupNotifications.get(group_id)!.push(notif);
-      events.emit({
-        time,
-        self_id: state.bot.uin,
-        event_type: 'group_join_request',
-        data: {
-          group_id,
-          notification_seq: notifSeq,
-          is_filtered: false,
-          initiator_id,
-          comment: comment ?? '',
-        },
-      });
-      return {
-        content: [{ type: 'text', text: `Group join request simulated: user ${initiator_id} -> group ${group_id}` }],
-      };
-    },
-  );
-
-  server.registerTool(
-    'simulate_group_invitation',
-    {
-      title: '模拟群邀请',
-      description: '模拟收到群邀请事件',
-      inputSchema: z.object({
-        group_id: zUin.describe('目标群号'),
-        initiator_id: zUin.describe('邀请者 QQ 号'),
-      }),
-    },
-    async ({ group_id, initiator_id }) => {
-      const time = now();
-      const invSeq = seq.next(`invitation_seq:${group_id}`);
-      state.groupInvitations.push({
-        groupId: group_id,
-        invitationSeq: invSeq,
-        initiatorId: initiator_id,
-      });
-      events.emit({
-        time,
-        self_id: state.bot.uin,
-        event_type: 'group_invitation',
-        data: {
-          group_id,
-          invitation_seq: invSeq,
-          initiator_id,
-        },
-      });
-      return {
-        content: [{ type: 'text', text: `Group invitation simulated: user ${initiator_id} invited bot to group ${group_id}` }],
-      };
+      return { content: [{ type: 'text', text: `Message simulated: ${scene} message from ${sender_id} to ${peer_id}, seq=${messageSeq}` }] };
     },
   );
 
@@ -250,366 +114,217 @@ export function registerSimulateTools(
       const msg = msgs?.find((m) => m.messageSeq === message_seq);
       if (msg) msg.recalled = true;
       events.emit({
-        time: now(),
-        self_id: state.bot.uin,
-        event_type: 'message_recall',
-        data: {
-          message_scene,
-          peer_id,
-          message_seq,
-          sender_id,
-          operator_id: operator_id ?? sender_id,
-          display_suffix: '撤回了一条消息',
-        },
+        time: now(), self_id: state.bot.uin, event_type: 'message_recall',
+        data: { message_scene, peer_id, message_seq, sender_id, operator_id: operator_id ?? sender_id, display_suffix: '撤回了一条消息' },
       });
-      return {
-        content: [{ type: 'text', text: `Message recall simulated: seq=${message_seq} in ${message_scene}:${peer_id}` }],
-      };
+      return { content: [{ type: 'text', text: `Message recall simulated: seq=${message_seq} in ${message_scene}:${peer_id}` }] };
     },
   );
 
   server.registerTool(
-    'simulate_group_member_increase',
+    'simulate_friend_event',
     {
-      title: '模拟成员入群',
-      description: '模拟群成员增加事件（自动添加成员到群组）',
+      title: '模拟好友事件',
+      description: '模拟好友相关事件（请求、戳一戳、文件上传）',
       inputSchema: z.object({
-        group_id: zUin.describe('群号'),
-        user_id: zUin.describe('新成员 QQ 号'),
-        operator_id: zUin.optional().describe('操作者 QQ 号'),
-        invitor_id: zUin.optional().describe('邀请者 QQ 号'),
-      }),
+        event_type: z.enum(['request', 'nudge', 'file_upload']).describe('事件类型'),
+        initiator_id: zUin.optional().describe('发起者 QQ 号（request）'),
+        user_id: zUin.optional().describe('好友 QQ 号（nudge, file_upload）'),
+        comment: z.string().optional().describe('验证消息（request）'),
+        via: z.string().optional().describe('来源（request）'),
+        display_action: z.string().optional().describe('显示动作（nudge）'),
+        display_suffix: z.string().optional().describe('显示后缀（nudge）'),
+        file_name: z.string().optional().describe('文件名（file_upload）'),
+        file_size: z.number().int().optional().describe('文件大小（file_upload）'),
+      }).passthrough(),
     },
-    async ({ group_id, user_id, operator_id, invitor_id }) => {
-      const group = state.groups.get(group_id);
-      if (!group) return { content: [{ type: 'text', text: `Error: Group ${group_id} not found` }], isError: true };
-      const user = state.users.get(user_id);
-      if (!user) return { content: [{ type: 'text', text: `Error: User ${user_id} not found` }], isError: true };
+    async (params) => {
       const t = now();
-      group.members.set(user_id, {
-        userId: user_id, nickname: user.nickname, sex: user.sex, groupId: group_id,
-        card: '', title: '', level: 1, role: 'member', joinTime: t, lastSentTime: t,
-      });
-      group.memberCount = group.members.size;
-      events.emit({
-        time: t, self_id: state.bot.uin, event_type: 'group_member_increase',
-        data: { group_id, user_id, operator_id, invitor_id },
-      });
-      return { content: [{ type: 'text', text: `Member increase simulated: user ${user_id} joined group ${group_id}` }] };
-    },
-  );
+      const self_id = state.bot.uin;
 
-  server.registerTool(
-    'simulate_group_member_decrease',
-    {
-      title: '模拟成员退群',
-      description: '模拟群成员减少事件（自动从群组移除成员）',
-      inputSchema: z.object({
-        group_id: zUin.describe('群号'),
-        user_id: zUin.describe('退群者 QQ 号'),
-        operator_id: zUin.optional().describe('操作者 QQ 号（被踢时）'),
-      }),
-    },
-    async ({ group_id, user_id, operator_id }) => {
-      const group = state.groups.get(group_id);
-      if (!group) return { content: [{ type: 'text', text: `Error: Group ${group_id} not found` }], isError: true };
-      group.members.delete(user_id);
-      group.memberCount = group.members.size;
-      events.emit({
-        time: now(), self_id: state.bot.uin, event_type: 'group_member_decrease',
-        data: { group_id, user_id, operator_id },
-      });
-      return { content: [{ type: 'text', text: `Member decrease simulated: user ${user_id} left group ${group_id}` }] };
-    },
-  );
-
-  server.registerTool(
-    'simulate_group_name_change',
-    {
-      title: '模拟群名变更',
-      description: '模拟群名称变更事件（自动更新群名）',
-      inputSchema: z.object({
-        group_id: zUin.describe('群号'),
-        new_group_name: z.string().describe('新群名'),
-        operator_id: zUin.describe('操作者 QQ 号'),
-      }),
-    },
-    async ({ group_id, new_group_name, operator_id }) => {
-      const group = state.groups.get(group_id);
-      if (!group) return { content: [{ type: 'text', text: `Error: Group ${group_id} not found` }], isError: true };
-      group.groupName = new_group_name;
-      events.emit({
-        time: now(), self_id: state.bot.uin, event_type: 'group_name_change',
-        data: { group_id, new_group_name, operator_id },
-      });
-      return { content: [{ type: 'text', text: `Group name change simulated: group ${group_id} renamed to "${new_group_name}"` }] };
-    },
-  );
-
-  server.registerTool(
-    'simulate_group_mute',
-    {
-      title: '模拟群禁言',
-      description: '模拟群成员禁言事件',
-      inputSchema: z.object({
-        group_id: zUin.describe('群号'),
-        user_id: zUin.describe('被禁言者 QQ 号'),
-        operator_id: zUin.describe('操作者 QQ 号'),
-        duration: z.number().int().describe('禁言时长（秒）'),
-      }),
-    },
-    async ({ group_id, user_id, operator_id, duration }) => {
-      const group = state.groups.get(group_id);
-      if (!group) return { content: [{ type: 'text', text: `Error: Group ${group_id} not found` }], isError: true };
-      const member = group.members.get(user_id);
-      if (member) member.shutUpEndTime = now() + duration;
-      events.emit({
-        time: now(), self_id: state.bot.uin, event_type: 'group_mute',
-        data: { group_id, user_id, operator_id, duration },
-      });
-      return { content: [{ type: 'text', text: `Group mute simulated: user ${user_id} muted for ${duration}s in group ${group_id}` }] };
-    },
-  );
-
-  server.registerTool(
-    'simulate_friend_nudge',
-    {
-      title: '模拟好友戳一戳',
-      description: '模拟好友戳一戳事件',
-      inputSchema: z.object({
-        user_id: zUin.describe('对方 QQ 号'),
-        display_action: z.string().optional().describe('显示动作'),
-        display_suffix: z.string().optional().describe('显示后缀'),
-      }),
-    },
-    async ({ user_id, display_action, display_suffix }) => {
-      events.emit({
-        time: now(), self_id: state.bot.uin, event_type: 'friend_nudge',
-        data: {
-          user_id,
-          is_self_send: false,
-          is_self_receive: true,
-          display_action: display_action ?? '戳了戳',
-          display_suffix: display_suffix ?? '',
-          display_action_img_url: '',
-        },
-      });
-      return { content: [{ type: 'text', text: `Friend nudge simulated from user ${user_id}` }] };
-    },
-  );
-
-  server.registerTool(
-    'simulate_group_nudge',
-    {
-      title: '模拟群戳一戳',
-      description: '模拟群内戳一戳事件',
-      inputSchema: z.object({
-        group_id: zUin.describe('群号'),
-        sender_id: zUin.describe('发送者 QQ 号'),
-        receiver_id: zUin.describe('接收者 QQ 号'),
-        display_action: z.string().optional().describe('显示动作'),
-        display_suffix: z.string().optional().describe('显示后缀'),
-      }),
-    },
-    async ({ group_id, sender_id, receiver_id, display_action, display_suffix }) => {
-      events.emit({
-        time: now(), self_id: state.bot.uin, event_type: 'group_nudge',
-        data: {
-          group_id,
-          sender_id,
-          receiver_id,
-          display_action: display_action ?? '戳了戳',
-          display_suffix: display_suffix ?? '',
-          display_action_img_url: '',
-        },
-      });
-      return { content: [{ type: 'text', text: `Group nudge simulated: ${sender_id} -> ${receiver_id} in group ${group_id}` }] };
-    },
-  );
-
-  server.registerTool(
-    'simulate_friend_file_upload',
-    {
-      title: '模拟好友文件上传',
-      description: '模拟好友上传文件事件',
-      inputSchema: z.object({
-        user_id: zUin.describe('上传者 QQ 号'),
-        file_name: z.string().describe('文件名'),
-        file_size: z.number().int().describe('文件大小（字节）'),
-      }),
-    },
-    async ({ user_id, file_name, file_size }) => {
-      events.emit({
-        time: now(), self_id: state.bot.uin, event_type: 'friend_file_upload',
-        data: {
-          user_id,
-          file_id: `f_${Date.now()}`,
-          file_name,
-          file_size,
-          file_hash: '',
-          is_self: false,
-        },
-      });
-      return { content: [{ type: 'text', text: `Friend file upload simulated: ${file_name} from user ${user_id}` }] };
-    },
-  );
-
-  server.registerTool(
-    'simulate_group_file_upload',
-    {
-      title: '模拟群文件上传',
-      description: '模拟群内文件上传事件',
-      inputSchema: z.object({
-        group_id: zUin.describe('群号'),
-        user_id: zUin.describe('上传者 QQ 号'),
-        file_name: z.string().describe('文件名'),
-        file_size: z.number().int().describe('文件大小（字节）'),
-      }),
-    },
-    async ({ group_id, user_id, file_name, file_size }) => {
-      events.emit({
-        time: now(), self_id: state.bot.uin, event_type: 'group_file_upload',
-        data: {
-          group_id,
-          user_id,
-          file_id: `gf_${Date.now()}`,
-          file_name,
-          file_size,
-        },
-      });
-      return { content: [{ type: 'text', text: `Group file upload simulated: ${file_name} by user ${user_id} in group ${group_id}` }] };
-    },
-  );
-
-  server.registerTool(
-    'simulate_group_invited_join_request',
-    {
-      title: '模拟邀请入群请求',
-      description: '模拟群成员邀请他人入群请求事件',
-      inputSchema: z.object({
-        group_id: zUin.describe('群号'),
-        initiator_id: zUin.describe('邀请者 QQ 号'),
-        target_user_id: zUin.describe('被邀请者 QQ 号'),
-      }),
-    },
-    async ({ group_id, initiator_id, target_user_id }) => {
-      const time = now();
-      const notifSeq = seq.next(`notification_seq:group:${group_id}`);
-      if (!state.groupNotifications.has(group_id)) state.groupNotifications.set(group_id, []);
-      state.groupNotifications.get(group_id)!.push({
-        type: 'invited_join_request',
-        groupId: group_id,
-        notificationSeq: notifSeq,
-        initiatorId: initiator_id,
-        targetUserId: target_user_id,
-        state: 'pending',
-      });
-      events.emit({
-        time, self_id: state.bot.uin, event_type: 'group_invited_join_request',
-        data: { group_id, notification_seq: notifSeq, initiator_id, target_user_id },
-      });
-      return { content: [{ type: 'text', text: `Invited join request simulated: ${initiator_id} invited ${target_user_id} to group ${group_id}` }] };
-    },
-  );
-
-  server.registerTool(
-    'simulate_group_admin_change',
-    {
-      title: '模拟管理员变更',
-      description: '模拟群管理员变更事件',
-      inputSchema: z.object({
-        group_id: zUin.describe('群号'),
-        user_id: zUin.describe('发生变更的用户 QQ 号'),
-        operator_id: zUin.describe('操作者 QQ 号'),
-        is_set: z.boolean().default(true).describe('是否设置为管理员，false 表示取消'),
-      }),
-    },
-    async ({ group_id, user_id, operator_id, is_set }) => {
-      const group = state.groups.get(group_id);
-      if (group) {
-        const member = group.members.get(user_id);
-        if (member) member.role = is_set !== false ? 'admin' : 'member';
+      switch (params.event_type) {
+        case 'request': {
+          const initiator_id = params.initiator_id as number;
+          const uid = `uid_${initiator_id}`;
+          state.friendRequests.push({
+            time: t, initiatorId: initiator_id, initiatorUid: uid,
+            targetUserId: self_id, targetUserUid: `uid_${self_id}`,
+            state: 'pending', comment: (params.comment as string) ?? '',
+            via: (params.via as string) ?? '', isFiltered: false,
+          });
+          events.emit({ time: t, self_id, event_type: 'friend_request',
+            data: { initiator_id, initiator_uid: uid, comment: params.comment ?? '', via: params.via ?? '' } });
+          return { content: [{ type: 'text', text: `Friend request simulated from ${initiator_id}` }] };
+        }
+        case 'nudge': {
+          events.emit({ time: t, self_id, event_type: 'friend_nudge',
+            data: { user_id: params.user_id, is_self_send: false, is_self_receive: true,
+              display_action: params.display_action ?? '戳了戳', display_suffix: params.display_suffix ?? '', display_action_img_url: '' } });
+          return { content: [{ type: 'text', text: `Friend nudge simulated from user ${params.user_id}` }] };
+        }
+        case 'file_upload': {
+          events.emit({ time: t, self_id, event_type: 'friend_file_upload',
+            data: { user_id: params.user_id, file_id: `f_${Date.now()}`, file_name: params.file_name, file_size: params.file_size, file_hash: '', is_self: false } });
+          return { content: [{ type: 'text', text: `Friend file upload simulated: ${params.file_name} from user ${params.user_id}` }] };
+        }
       }
-      events.emit({
-        time: now(), self_id: state.bot.uin, event_type: 'group_admin_change',
-        data: { group_id, user_id, operator_id, is_set: is_set !== false },
-      });
-      return { content: [{ type: 'text', text: `Admin change simulated: user ${user_id} ${is_set !== false ? 'promoted to' : 'demoted from'} admin in group ${group_id}` }] };
     },
   );
 
   server.registerTool(
-    'simulate_group_essence_message_change',
+    'simulate_group_event',
     {
-      title: '模拟精华消息变更',
-      description: '模拟群精华消息变更事件',
+      title: '模拟群事件',
+      description: '模拟群相关事件（入群、退群、禁言、戳一戳、文件上传等）',
       inputSchema: z.object({
+        event_type: z.enum([
+          'join_request', 'invited_join_request', 'invitation',
+          'member_increase', 'member_decrease',
+          'name_change', 'admin_change', 'essence_message_change',
+          'message_reaction', 'mute', 'whole_mute', 'nudge', 'file_upload',
+        ]).describe('事件类型'),
         group_id: zUin.describe('群号'),
-        message_seq: z.number().int().describe('消息序列号'),
-        operator_id: zUin.describe('操作者 QQ 号'),
-        is_set: z.boolean().default(true).describe('是否设置为精华，false 表示取消'),
-      }),
+        user_id: zUin.optional().describe('用户 QQ 号（member_increase/decrease, admin_change, mute, message_reaction, file_upload）'),
+        operator_id: zUin.optional().describe('操作者 QQ 号'),
+        invitor_id: zUin.optional().describe('邀请者 QQ 号（member_increase）'),
+        initiator_id: zUin.optional().describe('发起者 QQ 号（join_request, invited_join_request, invitation）'),
+        target_user_id: zUin.optional().describe('被邀请者 QQ 号（invited_join_request）'),
+        comment: z.string().optional().describe('验证消息（join_request）'),
+        new_group_name: z.string().optional().describe('新群名（name_change）'),
+        is_set: z.boolean().optional().describe('是否设置（admin_change, essence_message_change）'),
+        message_seq: z.number().int().optional().describe('消息序列号（essence_message_change, message_reaction）'),
+        face_id: z.string().optional().describe('表情 ID（message_reaction）'),
+        reaction_type: z.enum(['face', 'emoji']).optional().describe('回应类型（message_reaction）'),
+        is_add: z.boolean().optional().describe('是否添加（message_reaction）'),
+        duration: z.number().int().optional().describe('禁言时长秒（mute）'),
+        is_mute: z.boolean().optional().describe('是否全员禁言（whole_mute）'),
+        sender_id: zUin.optional().describe('发送者 QQ 号（nudge）'),
+        receiver_id: zUin.optional().describe('接收者 QQ 号（nudge）'),
+        display_action: z.string().optional().describe('显示动作（nudge）'),
+        display_suffix: z.string().optional().describe('显示后缀（nudge）'),
+        file_name: z.string().optional().describe('文件名（file_upload）'),
+        file_size: z.number().int().optional().describe('文件大小（file_upload）'),
+      }).passthrough(),
     },
-    async ({ group_id, message_seq, operator_id, is_set }) => {
-      if (!state.groupEssenceMessages.has(group_id)) state.groupEssenceMessages.set(group_id, new Set());
-      const essSet = state.groupEssenceMessages.get(group_id)!;
-      if (is_set !== false) essSet.add(message_seq); else essSet.delete(message_seq);
-      events.emit({
-        time: now(), self_id: state.bot.uin, event_type: 'group_essence_message_change',
-        data: { group_id, message_seq, operator_id, is_set: is_set !== false },
-      });
-      return { content: [{ type: 'text', text: `Essence message change: seq=${message_seq} in group ${group_id} ${is_set !== false ? 'set as' : 'removed from'} essence` }] };
-    },
-  );
+    async (params) => {
+      const gid = params.group_id as number;
+      const t = now();
+      const self_id = state.bot.uin;
+      const et = params.event_type as string;
 
-  server.registerTool(
-    'simulate_group_message_reaction',
-    {
-      title: '模拟群消息表情回应',
-      description: '模拟群消息表情回应事件',
-      inputSchema: z.object({
-        group_id: zUin.describe('群号'),
-        user_id: zUin.describe('发送回应者 QQ 号'),
-        message_seq: z.number().int().describe('消息序列号'),
-        face_id: z.string().describe('表情 ID'),
-        reaction_type: z.enum(['face', 'emoji']).default('face').describe('回应类型'),
-        is_add: z.boolean().default(true).describe('是否添加，false 表示取消'),
-      }),
-    },
-    async ({ group_id, user_id, message_seq, face_id, reaction_type, is_add }) => {
-      events.emit({
-        time: now(), self_id: state.bot.uin, event_type: 'group_message_reaction',
-        data: { group_id, user_id, message_seq, face_id, reaction_type: reaction_type ?? 'face', is_add: is_add !== false },
-      });
-      return { content: [{ type: 'text', text: `Message reaction: user ${user_id} ${is_add !== false ? 'added' : 'removed'} ${face_id} on seq=${message_seq} in group ${group_id}` }] };
-    },
-  );
+      const group = state.groups.get(gid);
 
-  server.registerTool(
-    'simulate_group_whole_mute',
-    {
-      title: '模拟群全体禁言',
-      description: '模拟群全体禁言事件',
-      inputSchema: z.object({
-        group_id: zUin.describe('群号'),
-        operator_id: zUin.describe('操作者 QQ 号'),
-        is_mute: z.boolean().default(true).describe('是否全员禁言，false 表示取消'),
-      }),
-    },
-    async ({ group_id, operator_id, is_mute }) => {
-      const group = state.groups.get(group_id);
-      if (group) group.wholeMuted = is_mute !== false;
-      events.emit({
-        time: now(), self_id: state.bot.uin, event_type: 'group_whole_mute',
-        data: { group_id, operator_id, is_mute: is_mute !== false },
-      });
-      return { content: [{ type: 'text', text: `Whole mute simulated: group ${group_id} ${is_mute !== false ? 'muted' : 'unmuted'} by ${operator_id}` }] };
+      // State mutations + event data per event_type
+      switch (et) {
+        case 'join_request': {
+          const notifSeq = seq.next(`notification_seq:group:${gid}`);
+          if (!state.groupNotifications.has(gid)) state.groupNotifications.set(gid, []);
+          state.groupNotifications.get(gid)!.push({
+            type: 'join_request', groupId: gid, notificationSeq: notifSeq,
+            isFiltered: false, initiatorId: params.initiator_id as number,
+            state: 'pending', comment: (params.comment as string) ?? '',
+          });
+          events.emit({ time: t, self_id, event_type: 'group_join_request',
+            data: { group_id: gid, notification_seq: notifSeq, is_filtered: false, initiator_id: params.initiator_id, comment: params.comment ?? '' } });
+          break;
+        }
+        case 'invited_join_request': {
+          const notifSeq = seq.next(`notification_seq:group:${gid}`);
+          if (!state.groupNotifications.has(gid)) state.groupNotifications.set(gid, []);
+          state.groupNotifications.get(gid)!.push({
+            type: 'invited_join_request', groupId: gid, notificationSeq: notifSeq,
+            initiatorId: params.initiator_id as number, targetUserId: params.target_user_id as number, state: 'pending',
+          });
+          events.emit({ time: t, self_id, event_type: 'group_invited_join_request',
+            data: { group_id: gid, notification_seq: notifSeq, initiator_id: params.initiator_id, target_user_id: params.target_user_id } });
+          break;
+        }
+        case 'invitation': {
+          const invSeq = seq.next(`invitation_seq:${gid}`);
+          state.groupInvitations.push({ groupId: gid, invitationSeq: invSeq, initiatorId: params.initiator_id as number });
+          events.emit({ time: t, self_id, event_type: 'group_invitation',
+            data: { group_id: gid, invitation_seq: invSeq, initiator_id: params.initiator_id } });
+          break;
+        }
+        case 'member_increase': {
+          const result = createMember(state, gid, params.user_id as number);
+          if (!result.ok) return { content: [{ type: 'text', text: `Error: ${result.error}` }], isError: true };
+          events.emit({ time: t, self_id, event_type: 'group_member_increase',
+            data: { group_id: gid, user_id: params.user_id, operator_id: params.operator_id, invitor_id: params.invitor_id } });
+          break;
+        }
+        case 'member_decrease': {
+          const result = deleteMember(state, gid, params.user_id as number);
+          if (!result.ok) return { content: [{ type: 'text', text: `Error: ${result.error}` }], isError: true };
+          events.emit({ time: t, self_id, event_type: 'group_member_decrease',
+            data: { group_id: gid, user_id: params.user_id, operator_id: params.operator_id } });
+          break;
+        }
+        case 'name_change': {
+          if (!group) return { content: [{ type: 'text', text: `Error: Group ${gid} not found` }], isError: true };
+          group.groupName = params.new_group_name as string;
+          events.emit({ time: t, self_id, event_type: 'group_name_change',
+            data: { group_id: gid, new_group_name: params.new_group_name, operator_id: params.operator_id } });
+          break;
+        }
+        case 'admin_change': {
+          const isSet = params.is_set !== false;
+          const role = isSet ? 'admin' as const : 'member' as const;
+          const result = setMemberRole(state, gid, params.user_id as number, role);
+          if (!result.ok) return { content: [{ type: 'text', text: `Error: ${result.error}` }], isError: true };
+          events.emit({ time: t, self_id, event_type: 'group_admin_change',
+            data: { group_id: gid, user_id: params.user_id, operator_id: params.operator_id, is_set: isSet } });
+          break;
+        }
+        case 'essence_message_change': {
+          const isSet = params.is_set !== false;
+          if (!state.groupEssenceMessages.has(gid)) state.groupEssenceMessages.set(gid, new Set());
+          const essSet = state.groupEssenceMessages.get(gid)!;
+          if (isSet) essSet.add(params.message_seq as number); else essSet.delete(params.message_seq as number);
+          events.emit({ time: t, self_id, event_type: 'group_essence_message_change',
+            data: { group_id: gid, message_seq: params.message_seq, operator_id: params.operator_id, is_set: isSet } });
+          break;
+        }
+        case 'message_reaction': {
+          events.emit({ time: t, self_id, event_type: 'group_message_reaction',
+            data: { group_id: gid, user_id: params.user_id, message_seq: params.message_seq,
+              face_id: params.face_id, reaction_type: params.reaction_type ?? 'face', is_add: params.is_add !== false } });
+          break;
+        }
+        case 'mute': {
+          if (group) {
+            const member = group.members.get(params.user_id as number);
+            if (member) member.shutUpEndTime = t + (params.duration as number);
+          }
+          events.emit({ time: t, self_id, event_type: 'group_mute',
+            data: { group_id: gid, user_id: params.user_id, operator_id: params.operator_id, duration: params.duration } });
+          break;
+        }
+        case 'whole_mute': {
+          if (group) group.wholeMuted = params.is_mute !== false;
+          events.emit({ time: t, self_id, event_type: 'group_whole_mute',
+            data: { group_id: gid, operator_id: params.operator_id, is_mute: params.is_mute !== false } });
+          break;
+        }
+        case 'nudge': {
+          events.emit({ time: t, self_id, event_type: 'group_nudge',
+            data: { group_id: gid, sender_id: params.sender_id, receiver_id: params.receiver_id,
+              display_action: params.display_action ?? '戳了戳', display_suffix: params.display_suffix ?? '', display_action_img_url: '' } });
+          break;
+        }
+        case 'file_upload': {
+          events.emit({ time: t, self_id, event_type: 'group_file_upload',
+            data: { group_id: gid, user_id: params.user_id, file_id: `gf_${Date.now()}`, file_name: params.file_name, file_size: params.file_size } });
+          break;
+        }
+      }
+
+      return { content: [{ type: 'text', text: `Group ${et} simulated in group ${gid}` }] };
     },
   );
 }
 
 async function convertToIncoming(seg: SimMessageSegment, state: SimState): Promise<SimMessageSegment> {
-  // Accept both {type, data: {...}} and {type, ...fields} input formats
   const fields: Record<string, unknown> = (seg.data && typeof seg.data === 'object')
     ? seg.data as Record<string, unknown>
     : (() => { const { type: _, ...rest } = seg; return rest; })();
