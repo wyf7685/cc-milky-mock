@@ -141,8 +141,17 @@ export function registerMessageHandlers(handlers: Map<string, ApiHandler>): void
     return { url: `http://localhost:${getCurrentPort()}/resources/${entry.resourceId}` };
   });
 
-  handlers.set('get_forwarded_messages', ({ forward_id }) => {
-    return { messages: [] };
+  handlers.set('get_forwarded_messages', ({ forward_id }, ctx) => {
+    const messages = ctx.state.forwardedMessages.get(String(forward_id)) ?? [];
+    return {
+      messages: messages.map((message) => ({
+        message_seq: message.messageSeq,
+        sender_name: message.senderName,
+        avatar_url: message.avatarUrl,
+        time: message.time,
+        segments: message.segments,
+      })),
+    };
   });
 
   handlers.set('mark_message_as_read', () => {

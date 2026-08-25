@@ -11,6 +11,7 @@ export function createStore(): SimState {
     groups: new Map(),
     friends: new Set(),
     messages: new Map(),
+    forwardedMessages: new Map(),
     clientSentMessages: [],
     friendRequests: [],
     groupNotifications: new Map(),
@@ -25,6 +26,31 @@ export function createStore(): SimState {
     resourceStore: new ResourceStore(),
   };
 }
+export function resetStore(state: SimState): void {
+  state.resourceStore.cleanup();
+
+  state.bot.uin = 10001;
+  state.bot.nickname = 'Milky Mock Bot';
+  delete state.bot.bio;
+
+  state.users.clear();
+  state.groups.clear();
+  state.friends.clear();
+  state.messages.clear();
+  state.forwardedMessages.clear();
+  state.clientSentMessages.length = 0;
+  state.friendRequests.length = 0;
+  state.groupNotifications.clear();
+  state.groupAnnouncements.clear();
+  state.groupEssenceMessages.clear();
+  state.groupInvitations.length = 0;
+  state.groupFiles.clear();
+  state.groupFolders.clear();
+  state.pinnedPeers.clear();
+  state.customFaceUrls.length = 0;
+  state.clientApiCalls.length = 0;
+}
+
 
 export function getMessageKey(scene: string, peerId: number): string {
   return `${scene}:${peerId}`;

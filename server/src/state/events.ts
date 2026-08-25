@@ -52,10 +52,30 @@ export class EventBus {
       }
     }
   }
+  disconnectAll(): void {
+    for (const client of this.sseClients) {
+      void client.close().catch(() => undefined);
+    }
+    this.sseClients.clear();
+
+    for (const client of this.wsClients) {
+      try {
+        client.terminate();
+      } catch {
+        // The socket is already closed.
+      }
+    }
+    this.wsClients.clear();
+  }
+
 
   getRecentEvents(limit = 50): MilkyEvent[] {
     return this.eventLog.slice(-limit);
   }
+  reset(): void {
+    this.eventLog.length = 0;
+  }
+
 
   getConnectionCount(): number {
     return this.sseClients.size + this.wsClients.size;

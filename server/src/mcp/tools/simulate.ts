@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { z } from 'zod/v4';
 import type { McpServer } from '@modelcontextprotocol/server';
 import type { SimState, SimMessageSegment } from '@/types.js';
@@ -30,7 +31,7 @@ export function registerSimulateTools(
         sender_id: zUin.describe('发送者 QQ 号'),
         segments: z.array(z.object({
           type: z.string(),
-        }).passthrough()).describe('消息段数组，格式同 OutgoingSegment'),
+        }).passthrough()).describe('消息段数组。使用 OutgoingSegment；forward.messages 节点使用 {user_id, sender_name, segments}，嵌套 segments 仍为 OutgoingSegment。forward 可同时提供 forward_id 以注册固定 ID。'),
       }),
     },
     async ({ message_scene, peer_id, sender_id, segments }) => {
@@ -39,7 +40,7 @@ export function registerSimulateTools(
       const time = now();
 
       const incomingSegments = await Promise.all(
-        (segments as SimMessageSegment[]).map((seg) => convertToIncoming(seg, state)),
+        (segments as SimMessageSegment[]).map((seg) => convertToIncoming(seg, state, seq)),
       );
 
       const msg = {
@@ -325,7 +326,11 @@ export function registerSimulateTools(
   );
 }
 
-async function convertToIncoming(seg: SimMessageSegment, state: SimState): Promise<SimMessageSegment> {
+export async function convertToIncoming(
+  seg: SimMessageSegment,
+  state: SimState,
+  seq: SequenceGenerator,
+): Promise<SimMessageSegment> {
   const fields: Record<string, unknown> = (seg.data && typeof seg.data === 'object')
     ? seg.data as Record<string, unknown>
     : (() => { const { type: _, ...rest } = seg; return rest; })();
@@ -358,6 +363,66 @@ async function convertToIncoming(seg: SimMessageSegment, state: SimState): Promi
           height: entry.height,
           summary: entry.summary,
           sub_type: entry.subType,
+        },
+      };
+    }
+    case 'forward': {
+      const suppliedId = typeof fields.forward_id === 'string' ? fields.forward_id : undefined;
+      const forwardId = suppliedId ?? `forward_${randomUUID().replace(/-/g, '').slice(0, 16)}`;
+      const rawMessages = Array.isArray(fields.messages) ? fields.messages : undefined;
+
+      if (rawMessages) {
+        const messages = [];
+        for (const rawMessage of rawMessages) {
+          const node = rawMessage && typeof rawMessage === 'object'
+            ? rawMessage as Record<string, unknown>
+            : {};
+          const userId = Number(node.user_id);
+          const senderName = String(
+            node.sender_name
+              ?? node.name
+              ?? state.users.get(userId)?.nickname
+              ?? (Number.isFinite(userId) ? userId : 'unknown'),
+          );
+          const rawSegments = Array.isArray(node.segments) ? node.segments : [];
+          const segments = [];
+          for (const nestedSegment of rawSegments) {
+            if (!nestedSegment || typeof nestedSegment !== 'object') continue;
+            segments.push(await convertToIncoming(nestedSegment as SimMessageSegment, state, seq));
+          }
+          messages.push({
+            messageSeq: seq.next(`forward_message_seq:${forwardId}`),
+            senderName,
+            avatarUrl: typeof node.avatar_url === 'string'
+              ? node.avatar_url
+              : Number.isFinite(userId)
+                ? `https://q1.qlogo.cn/g?b=qq&nk=${userId}&s=640`
+                : '',
+            time: typeof node.time === 'number' ? node.time : now(),
+            segments,
+          });
+        }
+        state.forwardedMessages.set(forwardId, messages);
+      } else if (!state.forwardedMessages.has(forwardId)) {
+        state.forwardedMessages.set(forwardId, []);
+      }
+
+      const registered = state.forwardedMessages.get(forwardId) ?? [];
+      const preview = Array.isArray(fields.preview)
+        ? fields.preview.map(String)
+        : registered.slice(0, 4).map((message) => {
+            const textSegment = message.segments.find((nested) => nested.type === 'text');
+            const textData = textSegment?.data as Record<string, unknown> | undefined;
+            return `${message.senderName}: ${String(textData?.text ?? '[消息]')}`;
+          });
+
+      return {
+        type,
+        data: {
+          forward_id: forwardId,
+          title: typeof fields.title === 'string' ? fields.title : '聊天记录',
+          preview,
+          summary: typeof fields.summary === 'string' ? fields.summary : `查看${registered.length}条转发消息`,
         },
       };
     }

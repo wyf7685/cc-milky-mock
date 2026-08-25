@@ -5,10 +5,12 @@ import type { SimState } from '@/types.js';
 import type { EventBus } from '@/state/events.js';
 import type { SequenceGenerator } from '@/state/sequences.js';
 import { createHttpServer } from '@/http/server.js';
+import { resetStore } from '@/state/store.js';
 
 let httpServer: Server | null = null;
 let currentPort: number | null = null;
 let resourceStoreRef: { cleanup(): void } | null = null;
+let eventBusRef: EventBus | null = null;
 
 export async function startServer(
   port: number,
@@ -20,11 +22,13 @@ export async function startServer(
   if (httpServer) await stopServer();
 
   resourceStoreRef = state.resourceStore;
+  eventBusRef = events;
   httpServer = createHttpServer(accessToken, state, events, seq);
   currentPort = port;
 
-  return new Promise((resolve, reject) => {
-    httpServer!.listen(port, () => {
+  return new Promise<string>((resolve, reject) => {
+    const server = httpServer!;
+    server.listen(port, () => {
       console.error(`[milky-mcp] milky server started on http://localhost:${port}`);
       resolve([
         `milky server started on http://localhost:${port}`,
@@ -32,21 +36,30 @@ export async function startServer(
         `Access token: ${accessToken}`,
       ].join('\n'));
     });
-    httpServer!.on('error', (err) => reject(err));
+    server.once('error', (error) => {
+      if (httpServer === server) {
+        httpServer = null;
+        currentPort = null;
+      }
+      reject(error);
+    });
   });
 }
 
 export async function stopServer(): Promise<void> {
-  return new Promise((resolve) => {
-    if (!httpServer) { resolve(); return; }
+  return new Promise<void>((resolve) => {
+    eventBusRef?.disconnectAll();
+    if (!httpServer) {
+      resourceStoreRef?.cleanup();
+      resolve();
+      return;
+    }
+
     const server = httpServer;
-    // Force-close after 2s if connections don't drain
-    const timer = setTimeout(() => {
-      console.error('[milky-mcp] force-closing milky server (connections did not drain)');
-      server.closeAllConnections?.();
-      finish();
-    }, 2000);
+    let finished = false;
     const finish = () => {
+      if (finished) return;
+      finished = true;
       clearTimeout(timer);
       console.error('[milky-mcp] milky server stopped');
       resourceStoreRef?.cleanup();
@@ -54,13 +67,28 @@ export async function stopServer(): Promise<void> {
       currentPort = null;
       resolve();
     };
-    server.close(() => finish());
+
+    // Force-close after 2s if connections don't drain
+    const timer = setTimeout(() => {
+      console.error('[milky-mcp] force-closing milky server (connections did not drain)');
+      server.closeAllConnections?.();
+      finish();
+    }, 2000);
+
+    server.close(finish);
   });
 }
-
-export function setResourceStoreRef(store: { cleanup(): void }): void {
-  resourceStoreRef = store;
+export function resetSimulation(
+  state: SimState,
+  events: EventBus,
+  seq: SequenceGenerator,
+): void {
+  resetStore(state);
+  events.reset();
+  seq.reset();
 }
+
+
 
 export function getServerStatus(): string | null {
   if (!httpServer) return null;
@@ -77,19 +105,24 @@ export function registerServerTools(
   events: EventBus,
   seq: SequenceGenerator,
 ): void {
+  resourceStoreRef = state.resourceStore;
+  eventBusRef = events;
+
   server.registerTool(
     'stop_milky_server',
     {
       title: '停止 milky 服务器',
-      description: '停止当前运行的 milky HTTP + WebSocket 服务器',
+      description: '停止当前运行的 milky HTTP + WebSocket 服务器，并清空全部模拟状态、活动记录和临时资源',
       inputSchema: z.object({}),
     },
     async () => {
-      if (!getServerStatus()) {
-        return { content: [{ type: 'text', text: 'No milky server is running' }] };
-      }
+      const wasRunning = getServerStatus() !== null;
       await stopServer();
-      return { content: [{ type: 'text', text: 'milky server stopped' }] };
+      resetSimulation(state, events, seq);
+      const text = wasRunning
+        ? 'milky server stopped; simulation state cleared'
+        : 'milky server was not running; simulation state cleared';
+      return { content: [{ type: 'text', text }] };
     },
   );
 

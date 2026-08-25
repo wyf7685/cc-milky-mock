@@ -11,4 +11,8 @@ export class SequenceGenerator {
   current(key: string): number {
     return this.counters.get(key) ?? 0;
   }
+  reset(): void {
+    this.counters.clear();
+  }
+
 }

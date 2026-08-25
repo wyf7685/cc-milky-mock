@@ -35,6 +35,8 @@ export class ResourceStore {
     const extension = guessExtension(uri, buffer);
     const resourceId = `res_${randomUUID().replace(/-/g, '').slice(0, 16)}`;
     const filePath = join(this.baseDir, `${resourceId}.${extension}`);
+    mkdirSync(this.baseDir, { recursive: true });
+
 
     writeFileSync(filePath, buffer);
 

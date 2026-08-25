@@ -58,6 +58,14 @@ export interface SimMessage {
   segments: SimMessageSegment[];
   recalled: boolean;
 }
+export interface SimForwardedMessage {
+  messageSeq: number;
+  senderName: string;
+  avatarUrl: string;
+  time: number;
+  segments: SimMessageSegment[];
+}
+
 
 export interface SimFriendRequest {
   time: number;
@@ -138,6 +146,8 @@ export interface SimState {
 
   messages: Map<string, SimMessage[]>; // key: "friend:peerId" | "group:groupId"
   clientSentMessages: SimMessage[];
+  forwardedMessages: Map<string, SimForwardedMessage[]>;
+
 
   friendRequests: SimFriendRequest[];
   groupNotifications: Map<number, SimGroupNotification[]>;

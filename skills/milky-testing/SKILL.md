@@ -15,10 +15,10 @@ milky-mock 是一个 milky 协议的模拟实现，通过 MCP 工具控制。你
 - **模拟消息/事件**：模拟其他用户发送消息、入群、戳一戳、表情回应等
 - **检查结果**：通过 `get_activity` 查看状态、消息记录、事件日志、API 调用
 
-## 可用工具（10 个）
+## 可用工具（9 个）
 
 ### 服务器管理
-- `stop_milky_server` — 停止服务器（自动清理临时资源）
+- `stop_milky_server` — 停止服务器并清空全部模拟状态、活动记录和临时资源
 - `get_milky_server_status` — 查看运行状态
 
 ### 环境管理
@@ -119,6 +119,22 @@ simulate_message_recall(message_scene="group", peer_id=123456, message_seq=1, se
 
 图片支持 `file://`、`http://`、`base64://` 三种 URI 格式。
 
+合并转发使用 OutgoingSegment 格式；mock 会把内联节点注册为 `forward_id` 对应内容，再向客户端发送标准 IncomingSegment：
+```json
+{
+  "type": "forward",
+  "forward_id": "forward-case-1",
+  "messages": [
+    {
+      "user_id": 20001,
+      "sender_name": "测试用户",
+      "segments": [{"type": "text", "text": "转发内容"}]
+    }
+  ]
+}
+```
+`forward_id` 可省略并由 mock 自动生成；提供时可用于构造固定 ID 的测试场景。节点字段使用 `sender_name`，嵌套消息仍使用 OutgoingSegment 格式。
+
 ## 注意事项
 
 - 服务器停止后所有模拟数据清空（内存存储），临时图片资源自动清理
@@ -128,3 +144,4 @@ simulate_message_recall(message_scene="group", peer_id=123456, message_seq=1, se
 - 客户端通过 WebSocket 连接：`ws://localhost:{port}/event?access_token={token}`
 - HTTP API 地址：`http://localhost:{port}/api/{endpoint}`
 - 图片资源通过 `GET /resources/{resource_id}` 访问（无需鉴权）
+- 图片 `temp_url` 指向本机 mock 服务。带 SSRF 防护的通用下载器应继续拒绝 loopback 地址；测试客户端应走适配器提供的协议资源获取能力，不应放宽 SSRF 策略。
