@@ -1,6 +1,7 @@
 import type { SimState } from '@/types.js';
 import type { EventBus } from '@/state/events.js';
 import type { SequenceGenerator } from '@/state/sequences.js';
+import type { ActivityLog } from '@/state/activity.js';
 import { registerSystemHandlers } from './handlers/system.js';
 import { registerMessageHandlers } from './handlers/message.js';
 import { registerGroupHandlers } from './handlers/group.js';
@@ -11,6 +12,7 @@ export interface ApiContext {
   state: SimState;
   events: EventBus;
   seq: SequenceGenerator;
+  activity: ActivityLog;
 }
 
 export type ApiHandler = (params: Record<string, unknown>, ctx: ApiContext) => Promise<unknown> | unknown;

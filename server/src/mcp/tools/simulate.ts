@@ -74,7 +74,7 @@ export function registerSimulateTools(
             },
           },
         };
-      } else {
+      } else if (scene === 'group') {
         const group = state.groups.get(peer_id);
         const member = group?.members.get(sender_id);
         eventData = {
@@ -90,10 +90,20 @@ export function registerSimulateTools(
               : { user_id: sender_id, nickname: 'unknown', sex: 'unknown', group_id: peer_id, card: '', title: '', level: 0, role: 'member', join_time: 0, last_sent_time: 0, shut_up_end_time: 0 },
           },
         };
+      } else {
+        eventData = {
+          ...baseEvent,
+          data: {
+            message_scene: 'temp', peer_id, message_seq: messageSeq, sender_id, time,
+            segments: incomingSegments,
+          },
+        };
       }
 
-      events.emit(eventData as MilkyEvent);
-      return { content: [{ type: 'text', text: `Message simulated: ${scene} message from ${sender_id} to ${peer_id}, seq=${messageSeq}` }] };
+      const activity = events.emit(eventData as MilkyEvent);
+      return {
+        content: [{ type: 'text', text: JSON.stringify({ message_scene: scene, peer_id, sender_id, message_seq: messageSeq, activity_cursor: activity.cursor }) }],
+      };
     },
   );
 
@@ -115,11 +125,13 @@ export function registerSimulateTools(
       const msgs = state.messages.get(key);
       const msg = msgs?.find((m) => m.messageSeq === message_seq);
       if (msg) msg.recalled = true;
-      events.emit({
+      const activity = events.emit({
         time: now(), self_id: state.bot.uin, event_type: 'message_recall',
         data: { message_scene, peer_id, message_seq, sender_id, operator_id: operator_id ?? sender_id, display_suffix: '撤回了一条消息' },
       });
-      return { content: [{ type: 'text', text: `Message recall simulated: seq=${message_seq} in ${message_scene}:${peer_id}` }] };
+      return {
+        content: [{ type: 'text', text: JSON.stringify({ message_scene, peer_id, message_seq, activity_cursor: activity.cursor }) }],
+      };
     },
   );
 
@@ -154,20 +166,20 @@ export function registerSimulateTools(
             state: 'pending', comment: (params.comment as string) ?? '',
             via: (params.via as string) ?? '', isFiltered: false,
           });
-          events.emit({ time: t, self_id, event_type: 'friend_request',
+          const activity = events.emit({ time: t, self_id, event_type: 'friend_request',
             data: { initiator_id, initiator_uid: uid, comment: params.comment ?? '', via: params.via ?? '' } });
-          return { content: [{ type: 'text', text: `Friend request simulated from ${initiator_id}` }] };
+          return { content: [{ type: 'text', text: JSON.stringify({ event_type: 'friend_request', activity_cursor: activity.cursor }) }] };
         }
         case 'nudge': {
-          events.emit({ time: t, self_id, event_type: 'friend_nudge',
+          const activity = events.emit({ time: t, self_id, event_type: 'friend_nudge',
             data: { user_id: params.user_id, is_self_send: false, is_self_receive: true,
               display_action: params.display_action ?? '戳了戳', display_suffix: params.display_suffix ?? '', display_action_img_url: '' } });
-          return { content: [{ type: 'text', text: `Friend nudge simulated from user ${params.user_id}` }] };
+          return { content: [{ type: 'text', text: JSON.stringify({ event_type: 'friend_nudge', activity_cursor: activity.cursor }) }] };
         }
         case 'file_upload': {
-          events.emit({ time: t, self_id, event_type: 'friend_file_upload',
+          const activity = events.emit({ time: t, self_id, event_type: 'friend_file_upload',
             data: { user_id: params.user_id, file_id: `f_${Date.now()}`, file_name: params.file_name, file_size: params.file_size, file_hash: '', is_self: false } });
-          return { content: [{ type: 'text', text: `Friend file upload simulated: ${params.file_name} from user ${params.user_id}` }] };
+          return { content: [{ type: 'text', text: JSON.stringify({ event_type: 'friend_file_upload', activity_cursor: activity.cursor }) }] };
         }
       }
     },
@@ -215,6 +227,7 @@ export function registerSimulateTools(
       const et = params.event_type as string;
 
       const group = state.groups.get(gid);
+      let activityCursor: number | undefined;
 
       // State mutations + event data per event_type
       switch (et) {
@@ -226,8 +239,8 @@ export function registerSimulateTools(
             isFiltered: false, initiatorId: params.initiator_id as number,
             state: 'pending', comment: (params.comment as string) ?? '',
           });
-          events.emit({ time: t, self_id, event_type: 'group_join_request',
-            data: { group_id: gid, notification_seq: notifSeq, is_filtered: false, initiator_id: params.initiator_id, comment: params.comment ?? '' } });
+          activityCursor = events.emit({ time: t, self_id, event_type: 'group_join_request',
+            data: { group_id: gid, notification_seq: notifSeq, is_filtered: false, initiator_id: params.initiator_id, comment: params.comment ?? '' } }).cursor;
           break;
         }
         case 'invited_join_request': {
@@ -237,36 +250,36 @@ export function registerSimulateTools(
             type: 'invited_join_request', groupId: gid, notificationSeq: notifSeq,
             initiatorId: params.initiator_id as number, targetUserId: params.target_user_id as number, state: 'pending',
           });
-          events.emit({ time: t, self_id, event_type: 'group_invited_join_request',
-            data: { group_id: gid, notification_seq: notifSeq, initiator_id: params.initiator_id, target_user_id: params.target_user_id } });
+          activityCursor = events.emit({ time: t, self_id, event_type: 'group_invited_join_request',
+            data: { group_id: gid, notification_seq: notifSeq, initiator_id: params.initiator_id, target_user_id: params.target_user_id } }).cursor;
           break;
         }
         case 'invitation': {
           const invSeq = seq.next(`invitation_seq:${gid}`);
           state.groupInvitations.push({ groupId: gid, invitationSeq: invSeq, initiatorId: params.initiator_id as number });
-          events.emit({ time: t, self_id, event_type: 'group_invitation',
-            data: { group_id: gid, invitation_seq: invSeq, initiator_id: params.initiator_id } });
+          activityCursor = events.emit({ time: t, self_id, event_type: 'group_invitation',
+            data: { group_id: gid, invitation_seq: invSeq, initiator_id: params.initiator_id } }).cursor;
           break;
         }
         case 'member_increase': {
           const result = createMember(state, gid, params.user_id as number);
           if (!result.ok) return { content: [{ type: 'text', text: `Error: ${result.error}` }], isError: true };
-          events.emit({ time: t, self_id, event_type: 'group_member_increase',
-            data: { group_id: gid, user_id: params.user_id, operator_id: params.operator_id, invitor_id: params.invitor_id } });
+          activityCursor = events.emit({ time: t, self_id, event_type: 'group_member_increase',
+            data: { group_id: gid, user_id: params.user_id, operator_id: params.operator_id, invitor_id: params.invitor_id } }).cursor;
           break;
         }
         case 'member_decrease': {
           const result = deleteMember(state, gid, params.user_id as number);
           if (!result.ok) return { content: [{ type: 'text', text: `Error: ${result.error}` }], isError: true };
-          events.emit({ time: t, self_id, event_type: 'group_member_decrease',
-            data: { group_id: gid, user_id: params.user_id, operator_id: params.operator_id } });
+          activityCursor = events.emit({ time: t, self_id, event_type: 'group_member_decrease',
+            data: { group_id: gid, user_id: params.user_id, operator_id: params.operator_id } }).cursor;
           break;
         }
         case 'name_change': {
           if (!group) return { content: [{ type: 'text', text: `Error: Group ${gid} not found` }], isError: true };
           group.groupName = params.new_group_name as string;
-          events.emit({ time: t, self_id, event_type: 'group_name_change',
-            data: { group_id: gid, new_group_name: params.new_group_name, operator_id: params.operator_id } });
+          activityCursor = events.emit({ time: t, self_id, event_type: 'group_name_change',
+            data: { group_id: gid, new_group_name: params.new_group_name, operator_id: params.operator_id } }).cursor;
           break;
         }
         case 'admin_change': {
@@ -274,8 +287,8 @@ export function registerSimulateTools(
           const role = isSet ? 'admin' as const : 'member' as const;
           const result = setMemberRole(state, gid, params.user_id as number, role);
           if (!result.ok) return { content: [{ type: 'text', text: `Error: ${result.error}` }], isError: true };
-          events.emit({ time: t, self_id, event_type: 'group_admin_change',
-            data: { group_id: gid, user_id: params.user_id, operator_id: params.operator_id, is_set: isSet } });
+          activityCursor = events.emit({ time: t, self_id, event_type: 'group_admin_change',
+            data: { group_id: gid, user_id: params.user_id, operator_id: params.operator_id, is_set: isSet } }).cursor;
           break;
         }
         case 'essence_message_change': {
@@ -283,14 +296,14 @@ export function registerSimulateTools(
           if (!state.groupEssenceMessages.has(gid)) state.groupEssenceMessages.set(gid, new Set());
           const essSet = state.groupEssenceMessages.get(gid)!;
           if (isSet) essSet.add(params.message_seq as number); else essSet.delete(params.message_seq as number);
-          events.emit({ time: t, self_id, event_type: 'group_essence_message_change',
-            data: { group_id: gid, message_seq: params.message_seq, operator_id: params.operator_id, is_set: isSet } });
+          activityCursor = events.emit({ time: t, self_id, event_type: 'group_essence_message_change',
+            data: { group_id: gid, message_seq: params.message_seq, operator_id: params.operator_id, is_set: isSet } }).cursor;
           break;
         }
         case 'message_reaction': {
-          events.emit({ time: t, self_id, event_type: 'group_message_reaction',
+          activityCursor = events.emit({ time: t, self_id, event_type: 'group_message_reaction',
             data: { group_id: gid, user_id: params.user_id, message_seq: params.message_seq,
-              face_id: params.face_id, reaction_type: params.reaction_type ?? 'face', is_add: params.is_add !== false } });
+              face_id: params.face_id, reaction_type: params.reaction_type ?? 'face', is_add: params.is_add !== false } }).cursor;
           break;
         }
         case 'mute': {
@@ -298,30 +311,32 @@ export function registerSimulateTools(
             const member = group.members.get(params.user_id as number);
             if (member) member.shutUpEndTime = t + (params.duration as number);
           }
-          events.emit({ time: t, self_id, event_type: 'group_mute',
-            data: { group_id: gid, user_id: params.user_id, operator_id: params.operator_id, duration: params.duration } });
+          activityCursor = events.emit({ time: t, self_id, event_type: 'group_mute',
+            data: { group_id: gid, user_id: params.user_id, operator_id: params.operator_id, duration: params.duration } }).cursor;
           break;
         }
         case 'whole_mute': {
           if (group) group.wholeMuted = params.is_mute !== false;
-          events.emit({ time: t, self_id, event_type: 'group_whole_mute',
-            data: { group_id: gid, operator_id: params.operator_id, is_mute: params.is_mute !== false } });
+          activityCursor = events.emit({ time: t, self_id, event_type: 'group_whole_mute',
+            data: { group_id: gid, operator_id: params.operator_id, is_mute: params.is_mute !== false } }).cursor;
           break;
         }
         case 'nudge': {
-          events.emit({ time: t, self_id, event_type: 'group_nudge',
+          activityCursor = events.emit({ time: t, self_id, event_type: 'group_nudge',
             data: { group_id: gid, sender_id: params.sender_id, receiver_id: params.receiver_id,
-              display_action: params.display_action ?? '戳了戳', display_suffix: params.display_suffix ?? '', display_action_img_url: '' } });
+              display_action: params.display_action ?? '戳了戳', display_suffix: params.display_suffix ?? '', display_action_img_url: '' } }).cursor;
           break;
         }
         case 'file_upload': {
-          events.emit({ time: t, self_id, event_type: 'group_file_upload',
-            data: { group_id: gid, user_id: params.user_id, file_id: `gf_${Date.now()}`, file_name: params.file_name, file_size: params.file_size } });
+          activityCursor = events.emit({ time: t, self_id, event_type: 'group_file_upload',
+            data: { group_id: gid, user_id: params.user_id, file_id: `gf_${Date.now()}`, file_name: params.file_name, file_size: params.file_size } }).cursor;
           break;
         }
       }
 
-      return { content: [{ type: 'text', text: `Group ${et} simulated in group ${gid}` }] };
+      return {
+        content: [{ type: 'text', text: JSON.stringify({ event_type: `group_${et}`, group_id: gid, activity_cursor: activityCursor }) }],
+      };
     },
   );
 }

@@ -4,6 +4,7 @@ import type { McpServer } from '@modelcontextprotocol/server';
 import type { SimState } from '@/types.js';
 import type { EventBus } from '@/state/events.js';
 import type { SequenceGenerator } from '@/state/sequences.js';
+import type { ActivityLog } from '@/state/activity.js';
 import { createHttpServer } from '@/http/server.js';
 import { resetStore } from '@/state/store.js';
 
@@ -18,65 +19,65 @@ export async function startServer(
   state: SimState,
   events: EventBus,
   seq: SequenceGenerator,
+  activity: ActivityLog,
 ): Promise<string> {
   if (httpServer) await stopServer();
 
   resourceStoreRef = state.resourceStore;
   eventBusRef = events;
-  httpServer = createHttpServer(accessToken, state, events, seq);
+  httpServer = createHttpServer(accessToken, state, events, seq, activity);
   currentPort = port;
 
-  return new Promise<string>((resolve, reject) => {
-    const server = httpServer!;
-    server.listen(port, () => {
-      console.error(`[milky-mcp] milky server started on http://localhost:${port}`);
-      resolve([
-        `milky server started on http://localhost:${port}`,
-        `WebSocket: ws://localhost:${port}/event?access_token=${accessToken}`,
-        `Access token: ${accessToken}`,
-      ].join('\n'));
-    });
-    server.once('error', (error) => {
-      if (httpServer === server) {
-        httpServer = null;
-        currentPort = null;
-      }
-      reject(error);
-    });
+  const { promise, resolve, reject } = Promise.withResolvers<string>();
+  const server = httpServer;
+  server.listen(port, () => {
+    console.error(`[milky-mcp] milky server started on http://localhost:${port}`);
+    resolve([
+      `milky server started on http://localhost:${port}`,
+      `WebSocket: ws://localhost:${port}/event?access_token=${accessToken}`,
+      `Access token: ${accessToken}`,
+    ].join('\n'));
   });
+  server.once('error', (error) => {
+    if (httpServer === server) {
+      httpServer = null;
+      currentPort = null;
+    }
+    reject(error);
+  });
+  return promise;
 }
 
 export async function stopServer(): Promise<void> {
-  return new Promise<void>((resolve) => {
-    eventBusRef?.disconnectAll();
-    if (!httpServer) {
-      resourceStoreRef?.cleanup();
-      resolve();
-      return;
-    }
+  const { promise, resolve } = Promise.withResolvers<void>();
+  eventBusRef?.disconnectAll();
+  if (!httpServer) {
+    resourceStoreRef?.cleanup();
+    resolve();
+    return promise;
+  }
 
-    const server = httpServer;
-    let finished = false;
-    const finish = () => {
-      if (finished) return;
-      finished = true;
-      clearTimeout(timer);
-      console.error('[milky-mcp] milky server stopped');
-      resourceStoreRef?.cleanup();
-      httpServer = null;
-      currentPort = null;
-      resolve();
-    };
+  const server = httpServer;
+  let finished = false;
+  const finish = () => {
+    if (finished) return;
+    finished = true;
+    clearTimeout(timer);
+    console.error('[milky-mcp] milky server stopped');
+    resourceStoreRef?.cleanup();
+    httpServer = null;
+    currentPort = null;
+    resolve();
+  };
 
-    // Force-close after 2s if connections don't drain
-    const timer = setTimeout(() => {
-      console.error('[milky-mcp] force-closing milky server (connections did not drain)');
-      server.closeAllConnections?.();
-      finish();
-    }, 2000);
+  const timer = setTimeout(() => {
+    console.error('[milky-mcp] force-closing milky server (connections did not drain)');
+    server.closeAllConnections?.();
+    finish();
+  }, 2000);
 
-    server.close(finish);
-  });
+  server.close(finish);
+  return promise;
 }
 export function resetSimulation(
   state: SimState,
@@ -104,6 +105,7 @@ export function registerServerTools(
   state: SimState,
   events: EventBus,
   seq: SequenceGenerator,
+  activity: ActivityLog,
 ): void {
   resourceStoreRef = state.resourceStore;
   eventBusRef = events;
@@ -120,8 +122,8 @@ export function registerServerTools(
       await stopServer();
       resetSimulation(state, events, seq);
       const text = wasRunning
-        ? 'milky server stopped; simulation state cleared'
-        : 'milky server was not running; simulation state cleared';
+        ? JSON.stringify({ running: false, cleared: true, activity_cursor: activity.currentCursor() })
+        : JSON.stringify({ running: false, cleared: true, activity_cursor: activity.currentCursor(), was_running: false });
       return { content: [{ type: 'text', text }] };
     },
   );
@@ -135,8 +137,17 @@ export function registerServerTools(
     },
     async () => {
       const status = getServerStatus();
-      if (!status) return { content: [{ type: 'text', text: 'milky server is not running' }] };
-      return { content: [{ type: 'text', text: `${status}\nActive connections: ${events.getConnectionCount()}` }] };
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify({
+            running: status != null,
+            port: currentPort,
+            connections: events.getConnectionCount(),
+            activity_cursor: activity.currentCursor(),
+          }),
+        }],
+      };
     },
   );
 }

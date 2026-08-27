@@ -1,6 +1,6 @@
 {
   "name": "milky-mcp-server",
-  "version": "0.1.0",
+  "version": "0.4.0",
   "type": "module",
   "description": "Milky protocol mock implementation as an MCP server, controllable by AI agents for local debugging",
   "main": "src/index.ts",
@@ -14,6 +14,9 @@
     "test": "tsx --test src/test/*.test.ts"
   },
   "packageManager": "pnpm@10.33.0",
+  "engines": {
+    "node": ">=22"
+  },
   "dependencies": {
     "@cfworker/json-schema": "^4.1.1",
     "@hono/node-server": "^1.14.0",

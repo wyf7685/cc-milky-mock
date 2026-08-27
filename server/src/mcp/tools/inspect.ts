@@ -2,68 +2,94 @@ import { z } from 'zod/v4';
 import type { McpServer } from '@modelcontextprotocol/server';
 import type { SimState } from '@/types.js';
 import type { EventBus } from '@/state/events.js';
+import type { ActivityLog, ActivityQuery } from '@/state/activity.js';
 
 const zUin = z.number().int().min(10001).max(4294967295);
-const zActivityType = z.enum(['state', 'messages', 'events', 'api_calls']);
+const zActivityType = z.enum(['event', 'message', 'api_call', 'connection']);
 
 export function registerInspectTools(
   server: McpServer,
   state: SimState,
   events: EventBus,
+  activity: ActivityLog,
 ): void {
   server.registerTool(
     'get_activity',
     {
-      title: '查看模拟活动',
-      description: '查看模拟环境的状态、消息记录、事件日志和 API 调用记录。可通过 type 数组选择需要的内容。',
+      title: '查询或等待模拟活动',
+      description: '按统一游标增量查询事件、Bot 出站消息、API 调用和连接变化。wait_timeout_ms 大于 0 时会等待首个匹配活动，避免轮询。',
       inputSchema: z.object({
-        type: z.array(zActivityType).optional().default(['state', 'messages', 'events', 'api_calls']).describe('要获取的数据类型数组'),
-        limit: z.number().int().optional().default(20).describe('消息/事件/API 调用的最大返回条数'),
-        message_scene: z.enum(['friend', 'group', 'temp']).optional().describe('按场景过滤消息'),
-        peer_id: zUin.optional().describe('按会话 ID 过滤消息'),
+        after_cursor: z.number().int().min(0).optional().describe('仅返回此游标之后的活动；不传且等待时只监听新活动'),
+        type: z.array(zActivityType).optional().describe('活动类型过滤，默认全部'),
+        limit: z.number().int().min(1).max(200).optional().default(20).describe('最大返回条数'),
+        wait_timeout_ms: z.number().int().min(0).max(30000).optional().default(0).describe('等待匹配活动的最长毫秒数；0 表示立即返回'),
+        message_scene: z.enum(['friend', 'group', 'temp']).optional().describe('会话场景过滤，统一作用于可解析的活动'),
+        peer_id: zUin.optional().describe('会话 ID 过滤，统一作用于可解析的活动'),
+        sender_id: zUin.optional().describe('发送者 QQ 号过滤'),
+        event_type: z.string().optional().describe('事件名称精确过滤'),
+        api: z.string().optional().describe('API 名称精确过滤'),
+        text_contains: z.string().optional().describe('按提取后的 plain_text 包含匹配'),
+        include_state: z.boolean().optional().default(false).describe('是否同时返回环境摘要'),
       }),
     },
-    async ({ type, limit, message_scene, peer_id }) => {
-      const types = type ?? ['state', 'messages', 'events', 'api_calls'];
-      const result: Record<string, unknown> = {};
-      const n = limit ?? 20;
+    async ({ after_cursor, type, limit, wait_timeout_ms, message_scene, peer_id, sender_id, event_type, api, text_contains, include_state }) => {
+      const query: ActivityQuery = {
+        afterCursor: after_cursor,
+        limit: limit ?? 20,
+        types: type,
+        messageScene: message_scene,
+        peerId: peer_id,
+        senderId: sender_id,
+        eventType: event_type,
+        api,
+        textContains: text_contains,
+      };
+      const waitMs = wait_timeout_ms ?? 0;
+      const result = waitMs > 0
+        ? await activity.wait(query, waitMs)
+        : { ...activity.query(query), timedOut: false };
 
-      if (types.includes('state')) {
-        result.state = {
+      const response: Record<string, unknown> = {
+        activities: result.activities,
+        next_cursor: result.nextCursor,
+        current_cursor: result.currentCursor,
+        oldest_cursor: result.oldestCursor,
+        truncated: result.truncated,
+        timed_out: result.timedOut,
+      };
+      if (include_state) {
+        response.state = {
           bot: state.bot,
           users: state.users.size,
           friends: state.friends.size,
-          groups: [...state.groups.entries()].map(([id, g]) => ({
+          groups: [...state.groups.entries()].map(([id, group]) => ({
             group_id: id,
-            group_name: g.groupName,
-            member_count: g.memberCount,
-            whole_muted: g.wholeMuted,
+            group_name: group.groupName,
+            member_count: group.memberCount,
+            whole_muted: group.wholeMuted,
           })),
-          total_messages: [...state.messages.values()].reduce((sum, msgs) => sum + msgs.length, 0),
-          client_sent_messages: state.clientSentMessages.length,
+          total_messages: [...state.messages.values()].reduce((sum, messages) => sum + messages.length, 0),
           friend_requests: state.friendRequests.length,
           pinned_peers: [...state.pinnedPeers],
           connections: events.getConnectionCount(),
         };
       }
 
-      if (types.includes('messages')) {
-        let msgs = [...state.clientSentMessages];
-        if (message_scene) msgs = msgs.filter((m) => m.scene === message_scene);
-        if (peer_id != null) msgs = msgs.filter((m) => m.peerId === peer_id);
-        result.messages = msgs.slice(-n);
-      }
+      return { content: [{ type: 'text', text: JSON.stringify(response) }] };
+    },
+  );
 
-      if (types.includes('events')) {
-        result.events = events.getRecentEvents(n);
-      }
-
-      if (types.includes('api_calls')) {
-        result.api_calls = state.clientApiCalls.slice(-n);
-      }
-
+  server.registerTool(
+    'clear_activity',
+    {
+      title: '清空活动记录',
+      description: '清空活动历史但保留实体、服务器和连接；游标继续单调递增。',
+      inputSchema: z.object({}),
+    },
+    async () => {
+      activity.clear();
       return {
-        content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+        content: [{ type: 'text', text: JSON.stringify({ cleared: true, current_cursor: activity.currentCursor() }) }],
       };
     },
   );

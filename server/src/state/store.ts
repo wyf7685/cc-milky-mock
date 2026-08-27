@@ -12,7 +12,6 @@ export function createStore(): SimState {
     friends: new Set(),
     messages: new Map(),
     forwardedMessages: new Map(),
-    clientSentMessages: [],
     friendRequests: [],
     groupNotifications: new Map(),
     groupAnnouncements: new Map(),
@@ -22,7 +21,6 @@ export function createStore(): SimState {
     groupFolders: new Map(),
     pinnedPeers: new Set(),
     customFaceUrls: [],
-    clientApiCalls: [],
     resourceStore: new ResourceStore(),
   };
 }
@@ -38,7 +36,6 @@ export function resetStore(state: SimState): void {
   state.friends.clear();
   state.messages.clear();
   state.forwardedMessages.clear();
-  state.clientSentMessages.length = 0;
   state.friendRequests.length = 0;
   state.groupNotifications.clear();
   state.groupAnnouncements.clear();
@@ -48,7 +45,6 @@ export function resetStore(state: SimState): void {
   state.groupFolders.clear();
   state.pinnedPeers.clear();
   state.customFaceUrls.length = 0;
-  state.clientApiCalls.length = 0;
 }
 
 

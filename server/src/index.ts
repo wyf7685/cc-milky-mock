@@ -3,6 +3,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/server';
 import { createStore } from './state/store.js';
 import { SequenceGenerator } from './state/sequences.js';
 import { EventBus } from './state/events.js';
+import { ActivityLog } from './state/activity.js';
 import { registerAllHandlers } from './api/registry.js';
 import { createMcpServer } from './mcp/server.js';
 import { stopServer } from './mcp/tools/server.js';
@@ -18,11 +19,12 @@ process.on('SIGTERM', cleanup);
 async function main() {
   const state = createStore();
   const seq = new SequenceGenerator();
-  const events = new EventBus();
+  const activity = new ActivityLog();
+  const events = new EventBus(activity);
 
   registerAllHandlers();
 
-  const mcpServer = createMcpServer(state, events, seq);
+  const mcpServer = createMcpServer(state, events, seq, activity);
   const transport = new StdioServerTransport();
   await mcpServer.connect(transport);
   console.error('[milky-mcp] MCP server ready (stdio). Use start_milky_server to launch HTTP server.');

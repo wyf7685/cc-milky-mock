@@ -7,6 +7,7 @@ import { WebSocket } from 'ws';
 import { registerAllHandlers, type ApiHandler } from '@/api/registry.js';
 import { registerMessageHandlers } from '@/api/handlers/message.js';
 import { EventBus } from '@/state/events.js';
+import { ActivityLog } from '@/state/activity.js';
 import { SequenceGenerator } from '@/state/sequences.js';
 import { createStore } from '@/state/store.js';
 import { getServerStatus, resetSimulation, startServer, stopServer } from '@/mcp/tools/server.js';
@@ -36,12 +37,13 @@ async function getUnusedPort(): Promise<number> {
 
 test('reset clears simulation data and the resource store remains reusable', async () => {
   const state = createStore();
-  const events = new EventBus();
+  const activity = new ActivityLog();
+  const events = new EventBus(activity);
   const seq = new SequenceGenerator();
 
   try {
     state.users.set(20001, { userId: 20001, nickname: 'Alice' });
-    state.clientApiCalls.push({ api: 'get_login_info', params: {}, time: 1 });
+    activity.appendApiCall({ api: 'get_login_info', params: {}, time: 1 }, state.bot.uin);
     events.emit({ event_type: 'message_receive' });
     assert.equal(seq.next('message'), 1);
 
@@ -51,8 +53,8 @@ test('reset clears simulation data and the resource store remains reusable', asy
     resetSimulation(state, events, seq);
 
     assert.equal(state.users.size, 0);
-    assert.equal(state.clientApiCalls.length, 0);
-    assert.equal(events.getRecentEvents().length, 0);
+    assert.equal(activity.currentCursor(), 0);
+    assert.equal(activity.query().activities.length, 0);
     assert.equal(seq.next('message'), 1);
     assert.equal(state.resourceStore.getEntry(first.resourceId), undefined);
 
@@ -65,7 +67,8 @@ test('reset clears simulation data and the resource store remains reusable', asy
 
 test('inline forward input registers content for get_forwarded_messages', async () => {
   const state = createStore();
-  const events = new EventBus();
+  const activity = new ActivityLog();
+  const events = new EventBus(activity);
   const seq = new SequenceGenerator();
 
   try {
@@ -96,7 +99,7 @@ test('inline forward input registers content for get_forwarded_messages', async 
 
     const response = await handler(
       { forward_id: 'forward_fixture' },
-      { state, events, seq },
+      { state, events, seq, activity },
     ) as { messages: Array<Record<string, unknown>> };
 
     assert.equal(response.messages.length, 1);
@@ -117,12 +120,13 @@ test('listen failure does not leave the server marked as running', async () => {
   assert.ok(address && typeof address !== 'string');
 
   const state = createStore();
-  const events = new EventBus();
+  const activity = new ActivityLog();
+  const events = new EventBus(activity);
   const seq = new SequenceGenerator();
 
   try {
     await assert.rejects(
-      () => startServer(address.port, 'test-token', state, events, seq),
+      () => startServer(address.port, 'test-token', state, events, seq, activity),
       (error: unknown) => (error as NodeJS.ErrnoException).code === 'EADDRINUSE',
     );
     assert.equal(getServerStatus(), null);
@@ -136,14 +140,15 @@ test('listen failure does not leave the server marked as running', async () => {
 
 test('HTTP server serves registered forwards and resources after restart', async () => {
   const state = createStore();
-  const events = new EventBus();
+  const activity = new ActivityLog();
+  const events = new EventBus(activity);
   const seq = new SequenceGenerator();
   const port = await getUnusedPort();
   const accessToken = 'test-token';
   registerAllHandlers();
 
   try {
-    await startServer(port, accessToken, state, events, seq);
+    await startServer(port, accessToken, state, events, seq, activity);
     const client = new WebSocket(`ws://localhost:${port}/event?access_token=${accessToken}`);
     await once(client, 'open');
     assert.equal(events.getConnectionCount(), 1);
@@ -178,7 +183,7 @@ test('HTTP server serves registered forwards and resources after restart', async
 
     await stopServer();
     assert.equal(events.getConnectionCount(), 0);
-    await startServer(port, accessToken, state, events, seq);
+    await startServer(port, accessToken, state, events, seq, activity);
     const resource = await state.resourceStore.resolveAndStore(ONE_PIXEL_PNG);
     const resourceResponse = await fetch(`http://localhost:${port}/resources/${resource.resourceId}`);
     assert.equal(resourceResponse.status, 200);

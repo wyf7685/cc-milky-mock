@@ -3,6 +3,7 @@ import type { McpServer } from '@modelcontextprotocol/server';
 import type { SimState } from '@/types.js';
 import type { EventBus } from '@/state/events.js';
 import type { SequenceGenerator } from '@/state/sequences.js';
+import type { ActivityLog } from '@/state/activity.js';
 import { createMember } from '@/utils/state.js';
 import { startServer } from './server.js';
 
@@ -11,8 +12,9 @@ const zUin = z.number().int().min(10001).max(4294967295);
 export function registerEnvTools(
   server: McpServer,
   state: SimState,
-  events?: EventBus,
-  seq?: SequenceGenerator,
+  events: EventBus,
+  seq: SequenceGenerator,
+  activity: ActivityLog,
 ): void {
   server.registerTool(
     'init_test_env',
@@ -109,9 +111,9 @@ export function registerEnvTools(
         created.push(`friend: ${uid}`);
       }
 
-      if (start_server && events && seq) {
+      if (start_server) {
         try {
-          const serverMsg = await startServer(port ?? 3000, access_token ?? 'milky-mock-token', state, events, seq);
+          const serverMsg = await startServer(port ?? 3000, access_token ?? 'milky-mock-token', state, events, seq, activity);
           created.push(`\n${serverMsg}`);
         } catch (err) {
           created.push(`\nWARN: Failed to start server: ${(err as Error).message}`);
@@ -119,7 +121,7 @@ export function registerEnvTools(
       }
 
       return {
-        content: [{ type: 'text', text: created.length > 0 ? created.join('\n') : 'Nothing to create (all entities already exist)' }],
+        content: [{ type: 'text', text: JSON.stringify({ changes: created, activity_cursor: activity.currentCursor() }) }],
       };
     },
   );

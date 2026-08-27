@@ -4,9 +4,10 @@ import { extname } from 'node:path';
 import { Hono } from 'hono';
 import { streamSSE } from 'hono/streaming';
 import { WebSocketServer, type WebSocket } from 'ws';
-import type { SimState } from '@/types.js';
+import type { ClientApiCall, SimState } from '@/types.js';
 import type { EventBus } from '@/state/events.js';
 import type { SequenceGenerator } from '@/state/sequences.js';
+import type { ActivityLog } from '@/state/activity.js';
 import { getHandler, type ApiContext } from '@/api/registry.js';
 import { ok, failed } from '@/api/response.js';
 import { getMimeType } from '@/utils/image.js';
@@ -16,9 +17,10 @@ export function createHttpServer(
   state: SimState,
   events: EventBus,
   seq: SequenceGenerator,
+  activity: ActivityLog,
 ): Server {
   const app = new Hono();
-  const ctx: ApiContext = { state, events, seq };
+  const ctx: ApiContext = { state, events, seq, activity };
 
   // Auth middleware: skip /resources/ (public), check Bearer token elsewhere
   app.use('*', async (c, next) => {
@@ -82,14 +84,14 @@ export function createHttpServer(
       }
 
       const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
-      const callRecord: { api: string; params: Record<string, unknown>; time: number; error?: string } = { api: apiName, params: body, time: Math.floor(Date.now() / 1000) };
+      const callRecord: ClientApiCall = { api: apiName, params: body, time: Math.floor(Date.now() / 1000) };
       try {
         const result = await handler(body, ctx);
-        state.clientApiCalls.push(callRecord);
+        activity.appendApiCall(callRecord, state.bot.uin);
         return c.json(ok(result));
       } catch (err) {
         callRecord.error = err instanceof Error ? err.message : String(err);
-        state.clientApiCalls.push(callRecord);
+        activity.appendApiCall(callRecord, state.bot.uin);
         throw err;
       }
     } catch (err) {

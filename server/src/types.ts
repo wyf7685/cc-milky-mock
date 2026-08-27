@@ -145,7 +145,6 @@ export interface SimState {
   friends: Set<string>; // "botUin:userUin"
 
   messages: Map<string, SimMessage[]>; // key: "friend:peerId" | "group:groupId"
-  clientSentMessages: SimMessage[];
   forwardedMessages: Map<string, SimForwardedMessage[]>;
 
 
@@ -161,6 +160,5 @@ export interface SimState {
   pinnedPeers: Set<string>; // "scene:peerId"
   customFaceUrls: string[];
 
-  clientApiCalls: ClientApiCall[];
   resourceStore: ResourceStore;
 }

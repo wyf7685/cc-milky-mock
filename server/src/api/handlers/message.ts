@@ -55,7 +55,7 @@ export function registerMessageHandlers(handlers: Map<string, ApiHandler>): void
     const key = getMessageKey('friend', uid);
     if (!ctx.state.messages.has(key)) ctx.state.messages.set(key, []);
     ctx.state.messages.get(key)!.push(msg);
-    ctx.state.clientSentMessages.push(msg);
+    ctx.activity.appendMessage(msg);
     return { message_seq: messageSeq, time };
   });
 
@@ -78,7 +78,7 @@ export function registerMessageHandlers(handlers: Map<string, ApiHandler>): void
     const key = getMessageKey('group', gid);
     if (!ctx.state.messages.has(key)) ctx.state.messages.set(key, []);
     ctx.state.messages.get(key)!.push(msg);
-    ctx.state.clientSentMessages.push(msg);
+    ctx.activity.appendMessage(msg);
     return { message_seq: messageSeq, time };
   });
 
