@@ -1,6 +1,6 @@
 {
   "name": "milky-mcp-server",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "type": "module",
   "description": "Milky protocol mock implementation as an MCP server, controllable by AI agents for local debugging",
   "main": "src/index.ts",

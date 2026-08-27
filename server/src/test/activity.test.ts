@@ -169,14 +169,34 @@ test('get_activity returns compact incremental output and clear_activity preserv
       include_state: true,
     });
     const output = JSON.parse(response.content[0]!.text) as {
-      activities: Array<{ cursor: number; plain_text: string }>;
+      activities: Array<{ cursor: number; plain_text: string; data?: unknown }>;
       next_cursor: number;
       state: { connections: number };
     };
     assert.deepEqual(output.activities.map((record) => record.cursor), [1]);
     assert.equal(output.activities[0]?.plain_text, 'ping');
+    assert.equal(output.activities[0]?.data, undefined);
     assert.equal(output.next_cursor, 1);
     assert.equal(output.state.connections, 0);
+
+    const fullResponse = await getActivity({
+      after_cursor: 0,
+      type: ['event'],
+      include_data: true,
+    });
+    const fullOutput = JSON.parse(fullResponse.content[0]!.text) as {
+      activities: Array<{ data?: unknown }>;
+    };
+    assert.deepEqual(fullOutput.activities[0]?.data, {
+      time: 1,
+      event_type: 'message_receive',
+      data: {
+        message_scene: 'friend',
+        peer_id: 20001,
+        sender_id: 20001,
+        segments: [{ type: 'text', data: { text: 'ping' } }],
+      },
+    });
 
     const clearActivity = handlers.get('clear_activity');
     assert.ok(clearActivity);

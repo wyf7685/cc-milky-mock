@@ -8,7 +8,7 @@ export function registerSystemHandlers(handlers: Map<string, ApiHandler>): void 
   handlers.set('get_impl_info', () => {
     return {
       impl_name: 'milky-mcp-server',
-      impl_version: '0.4.0',
+      impl_version: '0.5.0',
       qq_protocol_version: '1.0.0',
       qq_protocol_type: 'linux',
       milky_version: '1.2',

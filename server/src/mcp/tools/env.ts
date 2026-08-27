@@ -20,7 +20,7 @@ export function registerEnvTools(
     'init_test_env',
     {
       title: '批量初始化测试环境',
-      description: '一次性设置机器人信息、创建用户、群组、成员关系和好友关系。跳过已存在的实体，不会重复创建。',
+      description: '幂等创建 Bot、用户、群、成员和好友，可选启动 HTTP/WebSocket 服务；成员和好友引用的用户需已存在或同时列在 users，结果返回 activity_cursor。',
       inputSchema: z.object({
         bot: z.object({
           uin: zUin.describe('机器人 QQ 号'),
@@ -30,26 +30,26 @@ export function registerEnvTools(
         users: z.array(z.object({
           user_id: zUin.describe('用户 QQ 号'),
           nickname: z.string().describe('用户昵称'),
-          sex: z.enum(['male', 'female', 'unknown']).optional(),
-          remark: z.string().optional(),
-          qid: z.string().optional(),
-          age: z.number().int().optional(),
-          bio: z.string().optional(),
+          sex: z.enum(['male', 'female', 'unknown']).optional().describe('性别'),
+          remark: z.string().optional().describe('好友备注'),
+          qid: z.string().optional().describe('QID'),
+          age: z.number().int().optional().describe('年龄'),
+          bio: z.string().optional().describe('个性签名'),
         })).optional().default([]).describe('要创建的用户列表'),
         groups: z.array(z.object({
           group_id: zUin.describe('群号'),
           group_name: z.string().describe('群名称'),
-          max_member_count: z.number().int().optional(),
+          max_member_count: z.number().int().optional().describe('最大成员数，默认 500'),
           members: z.array(z.object({
-            user_id: zUin.describe('成员 QQ 号'),
-            role: z.enum(['owner', 'admin', 'member']).optional().default('member'),
-            card: z.string().optional(),
+            user_id: zUin.describe('成员 QQ 号；用户需已存在或同时列在 users'),
+            role: z.enum(['owner', 'admin', 'member']).optional().default('member').describe('群角色，默认 member'),
+            card: z.string().optional().describe('群名片'),
           })).optional().default([]).describe('群成员列表（用户需已创建）'),
         })).optional().default([]).describe('要创建的群组列表'),
-        friends: z.array(zUin).optional().default([]).describe('要添加为好友的用户 QQ 号列表'),
-        start_server: z.boolean().optional().default(false).describe('初始化完成后是否启动 HTTP 服务器'),
-        port: z.number().int().min(1).max(65535).optional().default(3000).describe('HTTP 服务器端口'),
-        access_token: z.string().optional().default('milky-mock-token').describe('Bearer access token'),
+        friends: z.array(zUin).optional().default([]).describe('要添加为好友的用户 QQ 号；用户需已存在或同时列在 users'),
+        start_server: z.boolean().optional().default(false).describe('初始化后是否启动 HTTP/WebSocket 服务，默认 false'),
+        port: z.number().int().min(1).max(65535).optional().default(3000).describe('HTTP 服务端口，默认 3000'),
+        access_token: z.string().optional().default('milky-mock-token').describe('Bearer access token，默认 milky-mock-token'),
       }),
     },
     async ({ bot, users, groups, friends, start_server, port, access_token }) => {

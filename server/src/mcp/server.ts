@@ -16,7 +16,7 @@ export function createMcpServer(
 ): McpServer {
   const server = new McpServer({
     name: 'milky-mcp-server',
-    version: '0.4.0',
+    version: '0.5.0',
   });
 
   registerServerTools(server, state, events, seq, activity);

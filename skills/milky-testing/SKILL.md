@@ -1,7 +1,7 @@
 ---
 name: milky-testing
 description: 当用户要测试 milky 客户端、模拟 QQ 消息、调试 nonebot 机器人、或进行 milky 协议相关测试时使用此技能
-version: 0.4.0
+version: 0.5.0
 ---
 
 # Milky 测试工作流
@@ -19,8 +19,9 @@ version: 0.4.0
 | `api_call` | 被测 Bot 调用的全部 Milky API，包括不产生消息的操作 |
 | `connection` | SSE / WebSocket 连接和断开 |
 
-每条活动都包含 `cursor`、`type`、`time` 和原始 `data`；可解析时还包含：
+每条活动默认返回 `cursor`、`type`、`time` 等摘要字段；完整原始 `data` 仅在 `include_data=true` 时返回。可解析时还包含：
 
+- `direction`
 - `message_scene`
 - `peer_id`
 - `sender_id`
@@ -44,7 +45,7 @@ version: 0.4.0
 - `get_milky_server_status()`
 - `stop_milky_server()`
 
-`init_test_env` 跳过已存在的用户、群和成员，可重复补充环境；结果包含 `activity_cursor`。
+`init_test_env` 跳过已存在的用户、群和成员，可重复补充环境；群成员和好友引用的用户需已存在或同时列在 `users`，结果包含 `activity_cursor`。
 
 ### 模拟消息与事件
 
@@ -57,11 +58,11 @@ version: 0.4.0
 
 ### 观察与资源
 
-- `get_activity(after_cursor?, type?, limit?, wait_timeout_ms?, message_scene?, peer_id?, sender_id?, event_type?, api?, text_contains?, include_state?)`
+- `get_activity(after_cursor?, type?, limit?, wait_timeout_ms?, message_scene?, peer_id?, sender_id?, event_type?, api?, text_contains?, include_data?, include_state?)`
 - `clear_activity()`
 - `get_image_data(resource_id)`
 
-`clear_activity` 只清除活动历史，保留实体、服务器和现有连接；游标不会回退。
+`clear_activity` 只清除活动历史，保留实体、消息、服务器和现有连接；游标不会回退，查询已清除范围内的旧游标会返回 `truncated=true`。
 
 ## 标准流程
 
@@ -95,6 +96,7 @@ get_milky_server_status()
 get_activity(
   after_cursor=<status.activity_cursor>,
   type=["connection"],
+  include_data=true,
   wait_timeout_ms=30000
 )
 ```
@@ -172,6 +174,7 @@ clear_activity()
 - 传 `after_cursor`：从该游标之后增量读取。
 - `wait_timeout_ms>0`：没有匹配结果时等待新活动。
 - 等待时不传 `after_cursor`：只等待调用之后产生的新活动，不匹配旧历史。
+- `include_data=true`：返回完整原始活动 `data`；默认关闭以避免重复传输消息正文。
 - `include_state=true`：活动结果中附带环境摘要；默认关闭以减少输出。
 - `limit` 最大 200；默认 20。
 
@@ -227,4 +230,4 @@ simulate_message_recall(message_scene="group", peer_id=123456, message_seq=1, se
 - 图片资源：`GET /resources/{resource_id}`
 - 服务器停止后内存状态和临时资源全部清空。
 - `event` 是入站，`message` 是 Bot 出站；不要从 `message` 中寻找模拟用户刚发送的消息。
-- `plain_text` 是辅助检索字段，断言完整消息结构时仍检查 `data.segments`。
+- `plain_text` 是默认返回的辅助检索字段；断言完整消息结构时设置 `include_data=true`，再检查 `data.segments`。

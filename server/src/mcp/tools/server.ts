@@ -114,7 +114,7 @@ export function registerServerTools(
     'stop_milky_server',
     {
       title: '停止 milky 服务器',
-      description: '停止当前运行的 milky HTTP + WebSocket 服务器，并清空全部模拟状态、活动记录和临时资源',
+      description: '停止当前 HTTP/WebSocket 服务并断开客户端，清空全部模拟实体、消息、活动和临时资源。',
       inputSchema: z.object({}),
     },
     async () => {
@@ -132,7 +132,7 @@ export function registerServerTools(
     'get_milky_server_status',
     {
       title: '查看 milky 服务器状态',
-      description: '查看当前 milky 服务器的运行状态',
+      description: '返回 running、port、connections 和 activity_cursor；模拟消息或等待新活动前可先读取当前游标。',
       inputSchema: z.object({}),
     },
     async () => {
